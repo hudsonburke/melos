@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "melos-core"
+version = "0.1.0"
+description = "Core data model and validation layer for the melos ecosystem"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+keywords = [
+  "biomechanics",
+  "mujoco",
+  "musculoskeletal",
+  "simulation",
+  "exoskeleton",
+]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["melos.core*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+"melos.core" = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.pyright]
+include = [
+  "src",
+  "tests",
+  "../melos-sim/src",
+  "../melos-blender/src",
+]
+extraPaths = [
+  "src",
+  "../melos-sim/src",
+  "../melos-blender/src",
+]
+pythonVersion = "3.12"

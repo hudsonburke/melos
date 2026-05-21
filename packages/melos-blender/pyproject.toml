@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "melos-blender"
+version = "0.1.0"
+description = "Blender authoring frontend for canonical melos core models"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["melos-core>=0.1.0", "melos-sim>=0.1.0", "melos-skin>=0.1.0"]
+keywords = ["biomechanics", "blender", "musculoskeletal", "simulation", "melos"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["melos.blender*"]
+namespaces = true
+
+[tool.pyright]
+include = ["src"]
+extraPaths = ["src", "../melos-core/src"]
+pythonVersion = "3.12"

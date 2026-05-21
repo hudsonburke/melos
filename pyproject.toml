@@ -1,0 +1,17 @@
+[tool.pytest.ini_options]
+testpaths = [
+  # Keep the default suite on the currently active MHR/MuJoCo example path.
+  # Broader legacy and high-surface-area suites can still be run explicitly.
+  "packages/melos-core/tests/test_skin_binding.py",
+  "packages/melos-blender/tests/test_packaging.py",
+  "packages/melos-skin/tests/test_core_adapters.py",
+  "packages/melos-skin/tests/test_example_project_operator.py",
+]
+
+[tool.uv.workspace]
+members = [
+  "packages/melos-core",
+  "packages/melos-blender",
+  "packages/melos-sim",
+  "packages/melos-skin",
+]

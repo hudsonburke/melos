@@ -1,0 +1,12 @@
+{
+  "include": [
+    "src",
+    "tests"
+  ],
+  "extraPaths": [
+    "src",
+    "../melos-blender/src",
+    "../melos-sim/src"
+  ],
+  "pythonVersion": "3.12"
+}

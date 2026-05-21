@@ -1,0 +1,14 @@
+{
+  "include": [
+    "melos-core/src",
+    "melos-core/tests",
+    "melos-blender/src",
+    "melos-mujoco/src"
+  ],
+  "extraPaths": [
+    "melos-core/src",
+    "melos-blender/src",
+    "melos-mujoco/src"
+  ],
+  "pythonVersion": "3.12"
+}
