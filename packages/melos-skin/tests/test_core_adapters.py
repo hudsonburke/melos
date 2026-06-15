@@ -61,6 +61,26 @@ def test_build_example_scale_link_map_includes_shoulder_girdle_segments() -> Non
 
 
 
+def test_myofullbody_translation_map_uses_clavicle_reference_joints_without_rebinding_upper_arm() -> None:
+    translation_map = build_myofullbody_translation_map()
+    rules = {rule.segment_id: rule for rule in translation_map.rules}
+
+    assert rules["left_upper_arm"].target_joint_ids == ["LeftShoulder", "LeftArm"]
+    assert rules["left_shoulder_girdle"].target_joint_ids == ["Chest", "LeftShoulder"]
+    assert rules["left_shoulder_girdle"].reference_target_joint_ids == ["Chest", "LeftArm"]
+    assert rules["left_shoulder_girdle"].source_tail_link_id == "humphant1_l"
+    assert rules["left_forearm"].source_tail_link_id == "lunate_l"
+    assert rules["left_forearm"].target_joint_ids == ["LeftArm", "LeftForeArm"]
+    assert rules["left_forearm"].reference_target_joint_ids == ["LeftForeArm", "LeftHand"]
+    assert rules["right_shoulder_girdle"].target_joint_ids == ["Chest", "RightShoulder"]
+    assert rules["right_shoulder_girdle"].reference_target_joint_ids == ["Chest", "RightArm"]
+    assert rules["right_shoulder_girdle"].source_tail_link_id == "humphant1_r"
+    assert rules["right_forearm"].source_tail_link_id == "lunate_r"
+    assert rules["right_forearm"].target_joint_ids == ["RightArm", "RightForeArm"]
+    assert rules["right_forearm"].reference_target_joint_ids == ["RightForeArm", "RightHand"]
+
+
+
 def test_build_example_target_joint_secondary_directions_uses_source_link_frames() -> None:
     class _FakeWorldTransform:
         def __init__(self, translation: tuple[float, float, float], rotation: tuple[float, float, float, float]) -> None:
@@ -158,7 +178,7 @@ def test_build_example_system_retarget_binding_spec_derives_core_binding_from_sy
 
     spec = build_example_system_retarget_binding_spec(
         system,
-        ["Hips", "Chest", "LeftShoulder", "LeftArm", "LeftHand", "RightShoulder", "RightHand"],
+        ["Hips", "Chest", "LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand", "RightShoulder", "RightArm", "RightForeArm", "RightHand"],
         translation_map,
     )
 
@@ -167,8 +187,9 @@ def test_build_example_system_retarget_binding_spec_derives_core_binding_from_sy
     assert spec.deformer_link_ids[:6] == ["pelvis", "torso", "thorax", "neck", "head", "clavicle_l"]
     assert spec.reference_link_ids == ["thorax", "humerus_l", "humerus_r", "pelvis"]
     assert spec.joint_to_link_map["LeftShoulder"] == "clavicle_l"
+    assert spec.joint_to_link_map["LeftArm"] == "humerus_l"
+    assert spec.joint_to_link_map["LeftForeArm"] == "ulna_l"
     assert spec.joint_to_link_map["LeftHand"] == "radius_l"
-    assert spec.annotations["retarget_link_layer"] == "translation_map_source_links_v1"
 
 
 
@@ -204,8 +225,12 @@ def test_build_example_human_mesh_rigging_plan_returns_alignment_and_binding_spe
         "Neck1": (0.0, 0.0, 130.0),
         "LeftShoulder": (-20.0, 10.0, 120.0),
         "LeftArm": (-40.0, 10.0, 115.0),
+        "LeftForeArm": (-60.0, 10.0, 110.0),
+        "LeftHand": (-78.0, 10.0, 105.0),
         "RightShoulder": (20.0, 10.0, 120.0),
         "RightArm": (40.0, 10.0, 115.0),
+        "RightForeArm": (60.0, 10.0, 110.0),
+        "RightHand": (78.0, 10.0, 105.0),
         "LeftLeg": (-10.0, 0.0, 90.0),
         "LeftShin": (-10.0, 0.0, 50.0),
         "LeftFoot": (-10.0, 0.0, 10.0),
@@ -238,7 +263,7 @@ def test_build_example_human_mesh_rigging_plan_returns_alignment_and_binding_spe
 
     assert plan.binding_spec.target_system_id == "anatomical"
     assert plan.binding_spec.anchor_link_id == "pelvis"
-    assert plan.rest_alignment_similarity["scale"] > 0.0
+    assert plan.rest_alignment_similarity.scale > 0.0
     assert [link.id for link in plan.display_system.links] == plan.binding_spec.deformer_link_ids
     assert plan.display_system.root_link_id == "pelvis"
     assert plan.reference_body_anchors["humerus_l"] == pytest.approx(
@@ -251,7 +276,7 @@ def test_build_example_human_mesh_rigging_plan_returns_alignment_and_binding_spe
         apply_similarity(skin_joint_positions["Chest"], plan.rest_alignment_similarity)
     )
     assert plan.reference_body_tail_points["clavicle_l"] == pytest.approx(
-        apply_similarity(skin_joint_positions["LeftShoulder"], plan.rest_alignment_similarity)
+        apply_similarity(skin_joint_positions["LeftArm"], plan.rest_alignment_similarity)
     )
 
 
@@ -262,6 +287,7 @@ def test_build_example_skin_joint_set_and_segment_measurements_return_core_model
             "LeftShoulder": (-20.0, 10.0, 130.0),
             "LeftArm": (-50.0, 10.0, 120.0),
             "LeftForeArm": (-70.0, 10.0, 115.0),
+            "LeftHand": (-88.0, 10.0, 110.0),
             "LeftLeg": (-10.0, 0.0, 90.0),
             "LeftShin": (-10.0, 0.0, 50.0),
             "LeftFoot": (-10.0, 0.0, 10.0),

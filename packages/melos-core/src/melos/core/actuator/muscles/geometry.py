@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from melos.core.common.ids import AssetId
+from melos.core.common.ids import Identifier
 from melos.core.common.metadata import AnnotationMap
 from melos.core.common.types import Transform
 from .enums import (
@@ -22,8 +22,8 @@ class MuscleGeometry:
     separate.
     """
 
-    asset_id: AssetId | None = None
-    centerline_asset_id: AssetId | None = None
+    asset_id: Identifier | None = None
+    centerline_asset_id: Identifier | None = None
     line_of_action_source: MuscleLineOfActionSource = MuscleLineOfActionSource.PATH_POINTS
     rest_transform: Transform = field(default_factory=Transform.identity)
     description: str = ""
@@ -39,6 +39,6 @@ class MuscleSimulationHints:
     """
 
     preferred_representation: MuscleRepresentationKind = MuscleRepresentationKind.PATH
-    volume_asset_id: AssetId | None = None
+    volume_asset_id: Identifier | None = None
     notes: str = ""
     annotations: AnnotationMap = field(default_factory=dict)

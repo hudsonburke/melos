@@ -7,6 +7,8 @@ from melos.core.actuator.muscles.enums import MusclePathPointKind, WrapGeometryK
 
 from melos.blender.constants import (
     ENTITY_KIND_KEY,
+    DISPLAY_NAME_KEY,
+    ENTITY_ID_KEY,
     MUSCLE_ID_KEY,
     MUSCLE_NAME_KEY,
     MUSCLE_PATH_POINT_LINK_ID_KEY,
@@ -50,6 +52,8 @@ class MELOS_OT_create_muscle_path_point(OperatorBase):
         point_id = settings.new_path_point_id or allocate_identifier(base_name, point_ids, fallback="point")
         object_ = _create_empty(context, name=base_name)
         object_[ENTITY_KIND_KEY] = MUSCLE_PATH_POINT_KIND
+        object_[ENTITY_ID_KEY] = point_id
+        object_[DISPLAY_NAME_KEY] = base_name
         object_[MUSCLE_ID_KEY] = settings.muscle_id or ""
         object_[MUSCLE_PATH_POINT_KIND_KEY] = settings.path_point_kind or MusclePathPointKind.VIA.value
         object_[MUSCLE_PATH_POINT_LINK_ID_KEY] = settings.path_point_link_id or ""
@@ -71,6 +75,8 @@ class MELOS_OT_create_wrap_geometry(OperatorBase):
         wrap_id = settings.new_wrap_id or allocate_identifier(base_name, wrap_ids, fallback="wrap")
         object_ = _create_empty(context, name=base_name)
         object_[ENTITY_KIND_KEY] = MUSCLE_WRAP_GEOMETRY_KIND
+        object_[ENTITY_ID_KEY] = wrap_id
+        object_[DISPLAY_NAME_KEY] = base_name
         object_[MUSCLE_ID_KEY] = settings.muscle_id or ""
         object_[MUSCLE_WRAP_KIND_KEY] = settings.wrap_kind or WrapGeometryKind.CYLINDER.value
         object_[MUSCLE_WRAP_LINK_ID_KEY] = settings.wrap_link_id or ""
@@ -93,9 +99,9 @@ def _create_empty(context, *, name: str):
 
 def _existing_entity_ids(scene, entity_kind: str) -> set[str]:
     return {
-        str(object_.get(ENTITY_KIND_KEY))
+        str(object_.get(ENTITY_ID_KEY))
         for object_ in scene.objects
-        if object_.get(ENTITY_KIND_KEY) == entity_kind and object_.get(MUSCLE_ID_KEY)
+        if object_.get(ENTITY_KIND_KEY) == entity_kind and object_.get(ENTITY_ID_KEY)
     }
 
 

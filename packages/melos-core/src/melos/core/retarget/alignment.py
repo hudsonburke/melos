@@ -1,12 +1,24 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Mapping, TypedDict
+from dataclasses import dataclass
+from typing import Any, Mapping
 
+from melos.core.common.transforms import (
+    vec3_add,
+    vec3_centroid,
+    vec3_cross,
+    vec3_dot,
+    vec3_length,
+    vec3_normalize,
+    vec3_scale,
+    vec3_sub,
+)
 from melos.core.common.types import Vec3
 
 
-class SimilarityTransform(TypedDict):
+@dataclass(frozen=True, slots=True)
+class SimilarityTransform:
     rotation: tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]
     scale: float
     translation: tuple[float, float, float]
@@ -227,7 +239,7 @@ def solve_axis_aligned_similarity(
         target_centroid[1] - rotated_centroid[1] * scale,
         target_centroid[2] - rotated_centroid[2] * scale,
     )
-    return {"rotation": rotation, "scale": scale, "translation": translation}
+    return SimilarityTransform(rotation=rotation, scale=scale, translation=translation)
 
 
 def solve_body_frame_similarity(
@@ -257,7 +269,7 @@ def solve_body_frame_similarity(
     else:
         scale = 1.0
     translation = sub(target_centroid, scale_vec(apply_rotation(source_centroid, rotation), scale))
-    return {"rotation": rotation, "scale": scale, "translation": translation}
+    return SimilarityTransform(rotation=rotation, scale=scale, translation=translation)
 
 
 def solve_body_frame_rotation(
@@ -276,17 +288,17 @@ def frame_basis(
     lateral = normalize(sub(points["left_thigh"], points["right_thigh"]))
     forward = normalize(cross(lateral, longitudinal))
     if length(forward) < 1e-8:
-        return identity_similarity()["rotation"]
+        return identity_similarity().rotation
     lateral = normalize(cross(longitudinal, forward))
     return matrix_from_columns(lateral, forward, longitudinal)
 
 
 def apply_similarity(point: Vec3, similarity: SimilarityTransform) -> Vec3:
-    rotated = apply_rotation(point, similarity["rotation"])
+    rotated = apply_rotation(point, similarity.rotation)
     return (
-        rotated[0] * similarity["scale"] + similarity["translation"][0],
-        rotated[1] * similarity["scale"] + similarity["translation"][1],
-        rotated[2] * similarity["scale"] + similarity["translation"][2],
+        rotated[0] * similarity.scale + similarity.translation[0],
+        rotated[1] * similarity.scale + similarity.translation[1],
+        rotated[2] * similarity.scale + similarity.translation[2],
     )
 
 
@@ -301,11 +313,11 @@ def apply_similarity_to_vertices(
 
 
 def identity_similarity() -> SimilarityTransform:
-    return {
-        "rotation": ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
-        "scale": 1.0,
-        "translation": (0.0, 0.0, 0.0),
-    }
+    return SimilarityTransform(
+        rotation=((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
+        scale=1.0,
+        translation=(0.0, 0.0, 0.0),
+    )
 
 
 def solve_rotation_kabsch(
@@ -390,47 +402,15 @@ def apply_rotation(
     )
 
 
-def centroid(points: list[Vec3]) -> Vec3:
-    return (
-        sum(point[0] for point in points) / len(points),
-        sum(point[1] for point in points) / len(points),
-        sum(point[2] for point in points) / len(points),
-    )
-
-
-def dot(a: Vec3, b: Vec3) -> float:
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-
-
-def add(a: Vec3, b: Vec3) -> Vec3:
-    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
-
-
-def sub(a: Vec3, b: Vec3) -> Vec3:
-    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
-
-
-def cross(a: Vec3, b: Vec3) -> Vec3:
-    return (
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    )
-
-
-def length(v: Vec3) -> float:
-    return math.sqrt(dot(v, v))
-
-
-def normalize(v: Vec3) -> Vec3:
-    magnitude = length(v)
-    if magnitude < 1e-8:
-        return (0.0, 0.0, 0.0)
-    return (v[0] / magnitude, v[1] / magnitude, v[2] / magnitude)
-
-
-def scale_vec(v: Vec3, scalar: float) -> Vec3:
-    return (v[0] * scalar, v[1] * scalar, v[2] * scalar)
+# Vec3 operations delegated to common.transforms
+add = vec3_add
+sub = vec3_sub
+cross = vec3_cross
+dot = vec3_dot
+length = vec3_length
+normalize = vec3_normalize
+scale_vec = vec3_scale
+centroid = vec3_centroid
 
 
 def transpose(

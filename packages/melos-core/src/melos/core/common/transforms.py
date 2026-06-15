@@ -99,3 +99,80 @@ def quaternion_conjugate(quaternion: Quat) -> Quat:
 
     w, x, y, z = quaternion
     return (w, -x, -y, -z)
+
+
+# ---------------------------------------------------------------------------
+# Vec3 helpers
+# ---------------------------------------------------------------------------
+
+def vec3_add(a: Vec3, b: Vec3) -> Vec3:
+    """Element-wise addition of two 3-vectors."""
+    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
+
+
+def vec3_sub(a: Vec3, b: Vec3) -> Vec3:
+    """Element-wise subtraction of two 3-vectors."""
+    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+
+def vec3_scale(v: Vec3, scalar: float) -> Vec3:
+    """Scale a 3-vector by a scalar."""
+    return (v[0] * scalar, v[1] * scalar, v[2] * scalar)
+
+
+def vec3_dot(a: Vec3, b: Vec3) -> float:
+    """Dot product of two 3-vectors."""
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def vec3_cross(a: Vec3, b: Vec3) -> Vec3:
+    """Cross product of two 3-vectors."""
+    return (
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    )
+
+
+def vec3_length(v: Vec3) -> float:
+    """Euclidean length of a 3-vector."""
+    from math import sqrt
+    return sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+
+
+def vec3_normalize(v: Vec3) -> Vec3:
+    """Return a unit-length copy of *v*. Returns zero vector if *v* is near-zero."""
+    magnitude = vec3_length(v)
+    if magnitude < 1e-8:
+        return (0.0, 0.0, 0.0)
+    return (v[0] / magnitude, v[1] / magnitude, v[2] / magnitude)
+
+
+def vec3_centroid(points: list[Vec3]) -> Vec3:
+    """Arithmetic mean of a list of 3-vectors."""
+    n = len(points)
+    return (
+        sum(p[0] for p in points) / n,
+        sum(p[1] for p in points) / n,
+        sum(p[2] for p in points) / n,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Axis-angle conversion
+# ---------------------------------------------------------------------------
+
+
+def axis_angle_to_quat(axis: Vec3, angle: float) -> Quat:
+    """Convert an axis + angle (radians) to a ``(w, x, y, z)`` quaternion.
+
+    Returns the identity quaternion if *axis* is zero-length.
+    """
+    norm = vec3_length(axis)
+    if norm < 1e-12:
+        return (1.0, 0.0, 0.0, 0.0)
+    ax, ay, az = axis[0] / norm, axis[1] / norm, axis[2] / norm
+    from math import cos, sin
+    half = angle * 0.5
+    s = sin(half)
+    return (cos(half), ax * s, ay * s, az * s)

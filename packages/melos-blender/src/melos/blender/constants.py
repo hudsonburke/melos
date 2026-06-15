@@ -82,6 +82,17 @@ MUSCLE_WRAP_SITE_ID_KEY = "melos_wrap_site_id"
 MUSCLE_WRAP_RADIUS_KEY = "melos_wrap_radius"
 MUSCLE_WRAP_HEIGHT_KEY = "melos_wrap_height"
 
+# Cable routing entity kinds
+DEVICE_CABLE_ROUTE_POINT_KIND = "device_cable_route_point"
+
+# Cable routing property keys
+CABLE_ACTUATOR_ID_KEY = "melos_cable_actuator_id"
+CABLE_ROUTE_ORDER_KEY = "melos_cable_route_order"
+CABLE_ROUTE_NODE_KIND_KEY = "melos_cable_route_node_kind"
+CABLE_ROUTE_SITE_ID_KEY = "melos_cable_route_site_id"
+CABLE_ROUTE_GEOMETRY_ID_KEY = "melos_cable_route_geometry_id"
+CABLE_ROUTE_SIDE_SITE_ID_KEY = "melos_cable_route_side_site_id"
+
 # Assembly entity kinds
 ATTACHMENT_KIND = "attachment"
 
@@ -163,6 +174,13 @@ __all__ = [
     "MUSCLE_WRAP_SITE_ID_KEY",
     "MUSCLE_WRAP_RADIUS_KEY",
     "MUSCLE_WRAP_HEIGHT_KEY",
+    "DEVICE_CABLE_ROUTE_POINT_KIND",
+    "CABLE_ACTUATOR_ID_KEY",
+    "CABLE_ROUTE_ORDER_KEY",
+    "CABLE_ROUTE_NODE_KIND_KEY",
+    "CABLE_ROUTE_SITE_ID_KEY",
+    "CABLE_ROUTE_GEOMETRY_ID_KEY",
+    "CABLE_ROUTE_SIDE_SITE_ID_KEY",
     "ATTACHMENT_KIND",
     "ATTACHMENT_DEVICE_ID_KEY",
     "ATTACHMENT_INTERFACE_ID_KEY",

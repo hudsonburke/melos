@@ -111,10 +111,6 @@ def build_anatomical_system_from_scene(scene: object, settings: object) -> Syste
         )
 
     root_link_id = getattr(settings, "anatomical_system_root_link_id", None) or None
-    profile: dict[str, object] = {}
-    species = getattr(settings, "anatomical_species", None) or None
-    if species is not None:
-        profile["species"] = species
 
     return build_system_model(
         system_id=getattr(settings, "anatomical_system_id", "anatomical"),
@@ -127,7 +123,6 @@ def build_anatomical_system_from_scene(scene: object, settings: object) -> Syste
         geometries=geometries,
         actuators=actuators,
         root_link_id=root_link_id,
-        profile=profile,
     )
 
 

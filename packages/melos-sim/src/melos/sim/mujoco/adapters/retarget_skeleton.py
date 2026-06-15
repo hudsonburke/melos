@@ -274,7 +274,6 @@ def build_example_deformer_display_system(
     system_role = getattr(system, "role", None) or SystemRole.CUSTOM
     system_description = str(getattr(system, "description", ""))
     system_asset_ids = list(getattr(system, "asset_ids", ()) or ())
-    system_profile = dict(getattr(system, "profile", {}) or {})
     system_annotations = dict(getattr(system, "annotations", {}) or {})
 
     return SystemModel(
@@ -290,7 +289,6 @@ def build_example_deformer_display_system(
         geometries=[],
         actuators=[],
         sensors=[],
-        profile=system_profile,
         annotations=system_annotations,
     )
 

@@ -29,7 +29,18 @@ from melos.core.common.enums import AssetRole
 from melos.core.common.types import Transform
 from melos.core.project.skin import SkinAttachment, SkinAttachmentFit
 from melos.core.project.skin_binding import collapse_joint_weights_to_binding_spec
-from melos.core.retarget.alignment import apply_similarity_to_vertices, frame_basis, matmul, transpose
+from melos.core.system import (
+    Actuator,
+    ActuatorKind,
+    CableParameters,
+    Link,
+    RouteNode,
+    RouteNodeKind,
+    Site,
+    SystemModel,
+    SystemRole,
+)
+from melos.core.retarget.alignment import apply_similarity, apply_similarity_to_vertices, frame_basis, matmul, transpose
 from melos.core.scaling import (
     fit_project_system_to_measurements,
     link_scale_factors_from_segment_scale_factors,
@@ -101,6 +112,9 @@ def run_create_example_project(
             build_example_visual_scale_link_map(),
         )
     anatomical_system = project.get_anatomical_system()
+    # Add cable assist device
+    if anatomical_system is not None:
+        _add_example_cable_device(project, anatomical_system)
     anatomical_link_ids = (
         [link.id for link in anatomical_system.links] if anatomical_system is not None else []
     )
@@ -186,7 +200,11 @@ def run_create_example_project(
     body_tail_dirs = reference_body_tail_dirs(translation_map)
     reference_body_anchors = None
     reference_body_tail_points = None
+    body_mesh_reference_anchors = None
+    body_mesh_reference_tail_points = None
     body_mesh_display_scale = 1.0
+    body_mesh_display_scale_factors: dict[str, float] = {}
+    body_mesh_source_tail_points: dict[str, tuple[float, float, float]] = {}
     if include_skin:
         skin_bundle = example_mhr_skin_bundle
         body_name_map = {i: body.id for i, body in enumerate(bodies)}
@@ -202,11 +220,29 @@ def run_create_example_project(
             binding_spec = rigging_plan.binding_spec
             reference_body_anchors = dict(rigging_plan.reference_body_anchors)
             reference_body_tail_points = dict(rigging_plan.reference_body_tail_points)
+            body_mesh_reference_anchors = dict(reference_body_anchors)
+            body_mesh_reference_tail_points = dict(reference_body_tail_points)
+            _extend_reference_body_points_with_hand_joints(
+                body_mesh_reference_anchors,
+                body_mesh_reference_tail_points,
+                skin_bundle["joints"],
+                rigging_plan.rest_alignment_similarity,
+            )
             body_mesh_display_scale = _compute_example_body_mesh_display_scale(
                 world_transforms,
                 translation_map,
-                reference_body_anchors,
-                reference_body_tail_points,
+                body_mesh_reference_anchors,
+                body_mesh_reference_tail_points,
+            )
+            body_mesh_display_scale_factors = _compute_example_body_mesh_display_scale_factors(
+                world_transforms,
+                translation_map,
+                body_mesh_reference_anchors,
+                body_mesh_reference_tail_points,
+            )
+            body_mesh_source_tail_points = _compute_example_body_mesh_source_tail_points(
+                world_transforms,
+                translation_map,
             )
             vertices = apply_similarity_to_vertices(
                 skin_bundle["vertices"],
@@ -290,11 +326,17 @@ def run_create_example_project(
             world_transforms=world_transforms,
             body_objects=body_objects,
             body_scale_factors=body_scale_factors,
+            body_display_scale_factors=body_mesh_display_scale_factors,
+            # Use the retarget display SystemModel's parent relationships for
+            # body-mesh visualization; Blender should not invent a different
+            # clavicle/arm hierarchy from the raw MuJoCo body tree.
+            display_relationship_system=display_armature_system,
             create_mesh_object=create_mesh_object,
             attach_to_armature=mesh_obj is None,
-            reference_body_anchors=reference_body_anchors,
-            reference_body_tail_points=reference_body_tail_points,
+            reference_body_anchors=body_mesh_reference_anchors or reference_body_anchors,
+            reference_body_tail_points=body_mesh_reference_tail_points or reference_body_tail_points,
             reference_body_tail_dirs=body_tail_dirs,
+            source_body_tail_points=body_mesh_source_tail_points,
             display_scale_factor=body_mesh_display_scale,
         )
 
@@ -345,22 +387,67 @@ def run_create_example_project(
     return project
 
 
+def _compute_example_body_mesh_source_tail_points(
+    world_transforms: dict[str, Transform],
+    translation_map: Any | None,
+) -> dict[str, tuple[float, float, float]]:
+    if translation_map is None:
+        return {}
+
+    source_tail_points: dict[str, tuple[float, float, float]] = {}
+    for rule in getattr(translation_map, "rules", ()) or ():
+        source_link_id = getattr(rule, "source_link_id", None)
+        source_tail_link_id = getattr(rule, "source_tail_link_id", None)
+        if source_link_id is None or source_tail_link_id is None:
+            continue
+        link_id = str(source_link_id)
+        tail_link_id = str(source_tail_link_id)
+        source_transform = world_transforms.get(link_id)
+        tail_transform = world_transforms.get(tail_link_id)
+        if source_transform is None or tail_transform is None:
+            continue
+        if _point_distance(source_transform.translation, tail_transform.translation) <= 1e-8:
+            continue
+        source_tail_points[link_id] = tuple(float(value) for value in tail_transform.translation)
+    return source_tail_points
+
+
+
 def _compute_example_body_mesh_display_scale(
     world_transforms: dict[str, Transform],
     translation_map: Any | None,
     reference_body_anchors: dict[str, tuple[float, float, float]] | None,
     reference_body_tail_points: dict[str, tuple[float, float, float]] | None,
 ) -> float:
+    scale_factors = _compute_example_body_mesh_display_scale_factors(
+        world_transforms,
+        translation_map,
+        reference_body_anchors,
+        reference_body_tail_points,
+    )
+    if not scale_factors:
+        return 1.0
+    ratios = sorted(scale_factors.values())
+    return float(ratios[len(ratios) // 2])
+
+
+
+def _compute_example_body_mesh_display_scale_factors(
+    world_transforms: dict[str, Transform],
+    translation_map: Any | None,
+    reference_body_anchors: dict[str, tuple[float, float, float]] | None,
+    reference_body_tail_points: dict[str, tuple[float, float, float]] | None,
+) -> dict[str, float]:
     if (
         translation_map is None
         or not reference_body_anchors
         or not reference_body_tail_points
     ):
-        return 1.0
+        return {}
 
     from melos.sim.mujoco.adapters.example_source import example_source_segment_length
 
-    ratios: list[float] = []
+    scale_factors: dict[str, float] = {}
     for rule in getattr(translation_map, "rules", ()) or ():
         segment_id = getattr(rule, "segment_id", None)
         source_link_id = getattr(rule, "source_link_id", None)
@@ -374,19 +461,138 @@ def _compute_example_body_mesh_display_scale(
             continue
         head = reference_body_anchors[link_id]
         tail = reference_body_tail_points[link_id]
-        display_length = (
-            (tail[0] - head[0]) ** 2
-            + (tail[1] - head[1]) ** 2
-            + (tail[2] - head[2]) ** 2
-        ) ** 0.5
+        display_length = _point_distance(head, tail)
         if display_length <= 1e-8:
             continue
-        ratios.append(display_length / source_length)
+        scale_factors[link_id] = display_length / source_length
+    return scale_factors
 
-    if not ratios:
-        return 1.0
-    ratios.sort()
-    return float(ratios[len(ratios) // 2])
+
+
+def _point_distance(
+    head: tuple[float, float, float],
+    tail: tuple[float, float, float],
+) -> float:
+    return (
+        (tail[0] - head[0]) ** 2
+        + (tail[1] - head[1]) ** 2
+        + (tail[2] - head[2]) ** 2
+    ) ** 0.5
+
+
+_ARM_REFERENCE_JOINTS: dict[str, tuple[str, str]] = {}
+
+
+_HAND_REFERENCE_JOINTS: dict[str, tuple[str, str]] = {
+    "lunate_l": ("LeftHand", "LeftHandMiddle1"),
+    "capitate_l": ("LeftHand", "LeftHandMiddle1"),
+    "trapezium_l": ("LeftHand", "LeftHandThumb1"),
+    "trapezoid_l": ("LeftHand", "LeftHandIndex1"),
+    "hamate_l": ("LeftHand", "LeftHandPinky1"),
+    "firstmc_l": ("LeftHandThumb1", "LeftHandThumb2"),
+    "proximal_thumb_l": ("LeftHandThumb2", "LeftHandThumb3"),
+    "distal_thumb_l": ("LeftHandThumb3", "LeftHandThumbEnd"),
+    "secondmc_l": ("LeftHandIndex1", "LeftHandIndex2"),
+    "2proxph_l": ("LeftHandIndex2", "LeftHandIndex3"),
+    "2midph_l": ("LeftHandIndex3", "LeftHandIndex4"),
+    "2distph_l": ("LeftHandIndex4", "LeftHandIndexEnd"),
+    "thirdmc_l": ("LeftHandMiddle1", "LeftHandMiddle2"),
+    "3proxph_l": ("LeftHandMiddle2", "LeftHandMiddle3"),
+    "3midph_l": ("LeftHandMiddle3", "LeftHandMiddle4"),
+    "3distph_l": ("LeftHandMiddle4", "LeftHandMiddleEnd"),
+    "fourthmc_l": ("LeftHandRing1", "LeftHandRing2"),
+    "4proxph_l": ("LeftHandRing2", "LeftHandRing3"),
+    "4midph_l": ("LeftHandRing3", "LeftHandRing4"),
+    "4distph_l": ("LeftHandRing4", "LeftHandRingEnd"),
+    "fifthmc_l": ("LeftHandPinky1", "LeftHandPinky2"),
+    "5proxph_l": ("LeftHandPinky2", "LeftHandPinky3"),
+    "5midph_l": ("LeftHandPinky3", "LeftHandPinky4"),
+    "5distph_l": ("LeftHandPinky4", "LeftHandPinkyEnd"),
+    "lunate_r": ("RightHand", "RightHandMiddle1"),
+    "capitate_r": ("RightHand", "RightHandMiddle1"),
+    "trapezium_r": ("RightHand", "RightHandThumb1"),
+    "trapezoid_r": ("RightHand", "RightHandIndex1"),
+    "hamate_r": ("RightHand", "RightHandPinky1"),
+    "firstmc_r": ("RightHandThumb1", "RightHandThumb2"),
+    "proximal_thumb_r": ("RightHandThumb2", "RightHandThumb3"),
+    "distal_thumb_r": ("RightHandThumb3", "RightHandThumbEnd"),
+    "secondmc_r": ("RightHandIndex1", "RightHandIndex2"),
+    "2proxph_r": ("RightHandIndex2", "RightHandIndex3"),
+    "2midph_r": ("RightHandIndex3", "RightHandIndex4"),
+    "2distph_r": ("RightHandIndex4", "RightHandIndexEnd"),
+    "thirdmc_r": ("RightHandMiddle1", "RightHandMiddle2"),
+    "3proxph_r": ("RightHandMiddle2", "RightHandMiddle3"),
+    "3midph_r": ("RightHandMiddle3", "RightHandMiddle4"),
+    "3distph_r": ("RightHandMiddle4", "RightHandMiddleEnd"),
+    "fourthmc_r": ("RightHandRing1", "RightHandRing2"),
+    "4proxph_r": ("RightHandRing2", "RightHandRing3"),
+    "4midph_r": ("RightHandRing3", "RightHandRing4"),
+    "4distph_r": ("RightHandRing4", "RightHandRingEnd"),
+    "fifthmc_r": ("RightHandPinky1", "RightHandPinky2"),
+    "5proxph_r": ("RightHandPinky2", "RightHandPinky3"),
+    "5midph_r": ("RightHandPinky3", "RightHandPinky4"),
+    "5distph_r": ("RightHandPinky4", "RightHandPinkyEnd"),
+}
+
+
+def _aligned_skin_joint_positions(
+    skin_joint_positions: dict[str, tuple[float, float, float]],
+    similarity: Any,
+) -> dict[str, tuple[float, float, float]]:
+    return {
+        str(joint_name): apply_similarity(
+            (float(position[0]), float(position[1]), float(position[2])),
+            similarity,
+        )
+        for joint_name, position in skin_joint_positions.items()
+    }
+
+
+
+def _override_example_arm_reference_body_points(
+    reference_body_anchors: dict[str, tuple[float, float, float]],
+    reference_body_tail_points: dict[str, tuple[float, float, float]],
+    skin_joint_positions: dict[str, tuple[float, float, float]],
+    similarity: Any,
+) -> None:
+    aligned_joint_positions = _aligned_skin_joint_positions(skin_joint_positions, similarity)
+    for link_id, (anchor_joint_id, tail_joint_id) in _ARM_REFERENCE_JOINTS.items():
+        head = aligned_joint_positions.get(anchor_joint_id)
+        tail = aligned_joint_positions.get(tail_joint_id)
+        if head is None or tail is None:
+            continue
+        reference_body_anchors[link_id] = head
+        delta = (
+            float(tail[0] - head[0]),
+            float(tail[1] - head[1]),
+            float(tail[2] - head[2]),
+        )
+        if (delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]) > 1e-12:
+            reference_body_tail_points[link_id] = tail
+
+
+
+def _extend_reference_body_points_with_hand_joints(
+    reference_body_anchors: dict[str, tuple[float, float, float]],
+    reference_body_tail_points: dict[str, tuple[float, float, float]],
+    skin_joint_positions: dict[str, tuple[float, float, float]],
+    similarity: Any,
+) -> None:
+    aligned_joint_positions = _aligned_skin_joint_positions(skin_joint_positions, similarity)
+
+    for link_id, (anchor_joint_id, tail_joint_id) in _HAND_REFERENCE_JOINTS.items():
+        head = aligned_joint_positions.get(anchor_joint_id)
+        tail = aligned_joint_positions.get(tail_joint_id)
+        if head is None or tail is None:
+            continue
+        reference_body_anchors[link_id] = head
+        delta = (
+            float(tail[0] - head[0]),
+            float(tail[1] - head[1]),
+            float(tail[2] - head[2]),
+        )
+        if (delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]) > 1e-12:
+            reference_body_tail_points[link_id] = tail
 
 
 
@@ -445,16 +651,25 @@ def _create_example_display_root(
     root.location = tuple(float(value) for value in pelvis_transform.translation)
     root.rotation_mode = "QUATERNION"
     root.rotation_quaternion = mathutils.Matrix(rotation_matrix).to_quaternion()
+    view_layer = getattr(bpy.context, "view_layer", None)
+    if view_layer is not None and hasattr(view_layer, "update"):
+        view_layer.update()
 
+    root_world_matrix = root.matrix_world.copy() if hasattr(root, "matrix_world") else None
     for obj in objects:
         if obj is None:
             continue
-        world_matrix = obj.matrix_world.copy() if hasattr(obj, "matrix_world") else None
         obj.parent = root
-        if hasattr(root, "matrix_world") and hasattr(obj, "matrix_parent_inverse"):
-            obj.matrix_parent_inverse = root.matrix_world.inverted()
-        if world_matrix is not None:
-            obj.matrix_world = world_matrix
+        # All example display data (skin vertices, armature edit bones, and body
+        # reference mesh vertices) is authored in the same core rest coordinate
+        # frame.  Apply the display root uniformly instead of preserving each
+        # child's pre-parent world matrix; otherwise toggled body meshes remain
+        # in raw MuJoCo coordinates while the skin/armature are shown upright.
+        parent_inverse = getattr(obj, "matrix_parent_inverse", None)
+        if parent_inverse is not None and hasattr(parent_inverse, "identity"):
+            parent_inverse.identity()
+        if root_world_matrix is not None and hasattr(obj, "matrix_world"):
+            obj.matrix_world = root_world_matrix.copy()
 
     if hasattr(root, "hide_viewport"):
         root.hide_viewport = True
@@ -537,9 +752,9 @@ def _configure_example_skin_mesh_display(mesh_obj: Any) -> None:
 
 def _serialize_similarity(similarity: dict[str, Any]) -> dict[str, Any]:
     return {
-        "rotation": [list(row) for row in similarity["rotation"]],
-        "scale": float(similarity["scale"]),
-        "translation": [float(value) for value in similarity["translation"]],
+        "rotation": [list(row) for row in similarity.rotation],
+        "scale": float(similarity.scale),
+        "translation": [float(value) for value in similarity.translation],
     }
 
 
@@ -602,3 +817,64 @@ def _hide_non_deforming_bones(
             continue
         if hasattr(bone, "hide"):
             bone.hide = True
+def _add_example_cable_device(project, anatomical_system):
+    """Add a cable assist device to the example project."""
+    # Find key anatomical sites for cable attachment
+    pelvis_site = None
+    tibia_site = None
+    for site in anatomical_system.sites:
+        if site.id == "pelvis":
+            pelvis_site = site
+        if site.id == "tibia_r":
+            tibia_site = site
+    # Create cable device system
+    cable_device = SystemModel(
+        id="cable_assist",
+        name="Cable Assist Device",
+        role=SystemRole.DEVICE,
+        root_link_id="cable_anchor",
+        links=[
+            Link(
+                id="cable_anchor",
+                name="Cable Anchor",
+                transform=Transform.identity(),
+            )
+        ],
+        sites=[
+            Site(
+                id="knee_pulley",
+                name="Knee Pulley",
+                link_id="cable_anchor",
+                transform=Transform.identity(),
+            )
+        ],
+        actuators=[
+            Actuator(
+                id="knee_cable",
+                name="Knee Assist Cable",
+                kind=ActuatorKind.CABLE,
+                route=[
+                    RouteNode(
+                        kind=RouteNodeKind.SITE,
+                        site_id="pelvis" if pelvis_site else "",
+                    ),
+                    RouteNode(
+                        kind=RouteNodeKind.WRAP,
+                        geometry_id="knee_pulley",
+                        side_site_id="knee_pulley_side",
+                    ),
+                    RouteNode(
+                        kind=RouteNodeKind.SITE,
+                        site_id="tibia_r" if tibia_site else "",
+                    ),
+                ],
+                cable=CableParameters(
+                    stiffness=1200.0,
+                    damping=2.0,
+                    rest_length=0.5,
+                ),
+            )
+        ],
+    )
+    # Add device to project
+    project.systems.append(cable_device)

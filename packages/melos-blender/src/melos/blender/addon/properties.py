@@ -8,7 +8,7 @@ from melos.core.common.enums import AssetRole
 from melos.core.common.units import DEFAULT_GRAVITY
 from melos.core.kinematics.enums import CoordinateKind, JointKind
 from melos.core.actuator.muscles.enums import MusclePathPointKind, WrapGeometryKind
-from melos.core.system.enums import ActuatorKind, SensorKind
+from melos.core.system.enums import ActuatorKind, RouteNodeKind, SensorKind
 
 
 def _fallback_property(**_: object) -> None:
@@ -40,6 +40,7 @@ _COORDINATE_KIND_ITEMS = [(kind.value, kind.name.title(), "") for kind in Coordi
 _ASSET_ROLE_ITEMS = [(role.value, role.name.title(), "") for role in AssetRole]
 _SENSOR_KIND_ITEMS = [(kind.value, kind.name.title(), "") for kind in SensorKind]
 _ACTUATOR_KIND_ITEMS = [(kind.value, kind.name.title(), "") for kind in ActuatorKind]
+_ROUTE_NODE_KIND_ITEMS = [(kind.value, kind.name.title(), "") for kind in RouteNodeKind]
 _MUSCLE_PATH_POINT_KIND_ITEMS = [(kind.value, kind.name.title(), "") for kind in MusclePathPointKind]
 _WRAP_GEOMETRY_KIND_ITEMS = [(kind.value, kind.name.title(), "") for kind in WrapGeometryKind]
 
@@ -133,6 +134,14 @@ MELOSAddonSettings.__annotations__ = {
     "device_actuator_kind": EnumProperty(name="Actuator Kind", items=_ACTUATOR_KIND_ITEMS, default=ActuatorKind.MOTOR.value),
     "device_actuator_joint_id": StringProperty(name="Actuator Joint ID", default=""),
     "device_actuator_coordinate_id": StringProperty(name="Actuator Coordinate ID", default=""),
+    "new_cable_route_name": StringProperty(name="Route Point Name", default="Route Point"),
+    "new_cable_route_id": StringProperty(name="Route Point ID", default=""),
+    "cable_actuator_id": StringProperty(name="Cable Actuator ID", default=""),
+    "cable_route_node_kind": EnumProperty(name="Node Kind", items=_ROUTE_NODE_KIND_ITEMS, default=RouteNodeKind.SITE.value),
+    "cable_route_order": FloatProperty(name="Order", default=0.0),
+    "cable_route_site_id": StringProperty(name="Route Site ID", default=""),
+    "cable_route_geometry_id": StringProperty(name="Route Wrap Geometry ID", default=""),
+    "cable_route_side_site_id": StringProperty(name="Route Side Site ID", default=""),
     "muscle_id": StringProperty(name="Muscle ID", default=""),
     "muscle_name": StringProperty(name="Muscle Name", default="Muscle"),
     "new_path_point_name": StringProperty(name="Point Name", default="Point"),

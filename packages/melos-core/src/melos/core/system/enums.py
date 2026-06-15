@@ -82,3 +82,10 @@ class ConstraintPolicy(StrEnum):
     LOWER_TO_SPRINGS = "lower_to_springs"
     LOWER_TO_CONTACTS = "lower_to_contacts"
     AUTHORING_ONLY = "authoring_only"
+
+
+class RouteNodeKind(StrEnum):
+    """Kind of waypoint in an actuator routing path (cable/tendon/muscle)."""
+
+    SITE = "site"
+    WRAP = "wrap"

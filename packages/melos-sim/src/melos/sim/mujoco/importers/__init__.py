@@ -26,90 +26,49 @@ def import_mjcf(
     output_dir_path: Path | None = Path(output_dir) if output_dir is not None else None
     report = ImportReport()
 
-    try:
-        from .assets import map_assets
-        from .bodies import map_bodies
-        from .config import map_simulation_config
-        from .joints import map_joints
-        from .muscles import map_muscle_paths, map_muscle_physiology, map_sites
-        from .wraps import map_wrap_geometries
-        from .xml_parser import parse_mjcf_file
+    from .assets import map_assets
+    from .bodies import map_bodies
+    from .config import map_simulation_config
+    from .defaults import resolve_defaults
+    from .joints import map_joints
+    from .muscles import map_muscle_paths, map_muscle_physiology, map_sites
+    from .wraps import map_wrap_geometries
+    from .xml_parser import parse_mjcf_file
 
-        root, directives, report = parse_mjcf_file(path, report)
+    root, directives, report = parse_mjcf_file(path, report)
+    defaults = resolve_defaults(root)
 
-        worldbody = root.worldbody
-        links, body_tree = map_bodies(worldbody, report)
-        sites = map_sites(worldbody, report)
-        joints = map_joints(body_tree, directives, report)
-
-        tendon_section = root.tendon
-        geometries, wrap_geom_map = map_wrap_geometries(tendon_section, body_tree, report)
-        actuators = map_muscle_paths(tendon_section, wrap_geom_map, report)
-
-        actuator_section = root.actuator
-        if actuator_section is not None:
-            physiology_map = map_muscle_physiology(actuator_section, report)
-            for actuator in actuators:
-                if actuator.id in physiology_map:
-                    actuator.parameters = {
-                        **actuator.parameters,
-                        "physiology": physiology_map[actuator.id],
-                    }
-
-        assets = map_assets(root, directives, path, output_dir_path, report)
-        simulation = map_simulation_config(root, directives, report)
-    except ModuleNotFoundError as ex:
-        if ex.name != "dm_control":
-            raise
+    worldbody = root.find("worldbody")
+    if worldbody is None:
         report.add_warning(
-            code="MJCF_IMPORTER_FALLBACK",
-            message="dm_control is not available; falling back to built-in XML MJCF importer",
+            code="MISSING_WORLDBODY",
+            message="MJCF has no <worldbody> element",
             location=str(path),
         )
+        worldbody_el = root
+    else:
+        worldbody_el = worldbody
 
-        from .assets_et import map_assets
-        from .bodies_et import map_bodies
-        from .config_et import map_simulation_config
-        from .defaults import resolve_defaults
-        from .joints_et import map_joints
-        from .muscles_et import map_muscle_paths, map_muscle_physiology, map_sites
-        from .wraps_et import map_wrap_geometries
-        from .xml_parser_et import parse_mjcf_file
+    links, body_tree = map_bodies(worldbody_el, defaults, report)
+    sites = map_sites(worldbody_el, report)
+    joints = map_joints(worldbody_el, body_tree, defaults, directives, report)
 
-        root, directives, report = parse_mjcf_file(path, report)
-        defaults = resolve_defaults(root)
+    tendon_section = root.find("tendon")
+    geometries, wrap_geom_map = map_wrap_geometries(worldbody_el, tendon_section, body_tree, defaults, report)
+    actuators = map_muscle_paths(tendon_section, worldbody_el, wrap_geom_map, body_tree, report)
 
-        worldbody = root.find("worldbody")
-        if worldbody is None:
-            report.add_warning(
-                code="MISSING_WORLDBODY",
-                message="MJCF has no <worldbody> element",
-                location=str(path),
-            )
-            worldbody_el = root
-        else:
-            worldbody_el = worldbody
+    actuator_section = root.find("actuator")
+    if actuator_section is not None:
+        physiology_map = map_muscle_physiology(actuator_section, defaults, report)
+        for actuator in actuators:
+            if actuator.id in physiology_map:
+                actuator.parameters = {
+                    **actuator.parameters,
+                    "physiology": physiology_map[actuator.id],
+                }
 
-        links, body_tree = map_bodies(worldbody_el, defaults, report)
-        sites = map_sites(worldbody_el, report)
-        joints = map_joints(worldbody_el, body_tree, defaults, directives, report)
-
-        tendon_section = root.find("tendon")
-        geometries, wrap_geom_map = map_wrap_geometries(worldbody_el, tendon_section, body_tree, defaults, report)
-        actuators = map_muscle_paths(tendon_section, worldbody_el, wrap_geom_map, body_tree, report)
-
-        actuator_section = root.find("actuator")
-        if actuator_section is not None:
-            physiology_map = map_muscle_physiology(actuator_section, defaults, report)
-            for actuator in actuators:
-                if actuator.id in physiology_map:
-                    actuator.parameters = {
-                        **actuator.parameters,
-                        "physiology": physiology_map[actuator.id],
-                    }
-
-        assets = map_assets(root, directives, path, output_dir_path, report)
-        simulation = map_simulation_config(root, directives, report)
+    assets = map_assets(root, directives, path, output_dir_path, report)
+    simulation = map_simulation_config(root, directives, report)
 
     root_link_id = links[0].id if links else None
     pid = project_id if project_id is not None else path.stem

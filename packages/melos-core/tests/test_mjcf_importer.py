@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import pytest
 
+
+from melos.core.common.enums import AssetRole
 from melos.core.system.enums import ActuatorKind, GeometryRole, SystemRole
 from melos.sim.mujoco.importers.report import ImportReport, ImportWarning
 
@@ -80,39 +83,71 @@ def test_import_mjcf_builds_anatomical_system(tmp_path: Path) -> None:
     assert any(link.asset_ids for link in system.links)
 
 
-def test_import_mjcf_normalizes_nested_default_muscle_blocks(tmp_path: Path) -> None:
+def test_import_mjcf_groups_multiple_body_joints_into_one_core_joint(tmp_path: Path) -> None:
     from melos.sim.mujoco.importers import import_mjcf
 
-    fixture = tmp_path / "nested-default-muscle.xml"
+    fixture = tmp_path / "multi-joint-body.xml"
     fixture.write_text(
         """
         <mujoco model="demo">
-          <default>
-            <default class="forearm_muscle">
-              <muscle ctrllimited="true" ctrlrange="-1 1"/>
-              <tendon width="0.002"/>
-            </default>
-          </default>
           <worldbody>
-            <body name="pelvis">
-              <site name="origin_site"/>
-              <site name="distal_site"/>
+            <body name="parent">
+              <body name="child" pos="0 0 1">
+                <joint name="child_rx" type="hinge" axis="1 0 0"/>
+                <joint name="child_ry" type="hinge" axis="0 1 0"/>
+              </body>
             </body>
           </worldbody>
-          <tendon>
-            <spatial name="test_tendon" class="forearm_muscle">
-              <site site="origin_site"/>
-              <site site="distal_site"/>
-            </spatial>
-          </tendon>
-          <actuator>
-            <muscle name="test" class="forearm_muscle" tendon="test_tendon" force="10" lengthrange="1 2"/>
-          </actuator>
         </mujoco>
         """.strip()
     )
 
     result = import_mjcf(fixture)
+    system = result.project.systems[0]
+    child_joint = next(joint for joint in system.joints if joint.child_link_id == "child")
 
-    assert any(w.code == "MJCF_NORMALIZED_DEFAULT_MUSCLE" for w in result.report.warnings)
-    assert result.project.systems[0].actuators[0].parameters["physiology"]["max_isometric_force"] == 10.0
+    assert child_joint.id == "child_joint"
+    assert child_joint.parent_link_id == "parent"
+    assert [coordinate.id for coordinate in child_joint.coordinates] == ["child_rx", "child_ry"]
+    assert [coordinate.axis for coordinate in child_joint.coordinates] == [
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+    ]
+
+
+
+def test_import_mjcf_collects_mesh_assets_from_default_class_mesh_geoms(tmp_path: Path) -> None:
+    from melos.sim.mujoco.importers import import_mjcf
+
+    mesh_path = tmp_path / "humerus.stl"
+    mesh_path.write_bytes(b"0" * 84)
+
+    fixture = tmp_path / "default-class-mesh.xml"
+    fixture.write_text(
+        """
+        <mujoco model="demo">
+          <default>
+            <default class="bone">
+              <geom type="mesh"/>
+            </default>
+          </default>
+          <asset>
+            <mesh name="humerus_mesh" file="humerus.stl"/>
+          </asset>
+          <worldbody>
+            <body name="humerus" pos="0 0 1">
+              <geom class="bone" mesh="humerus_mesh" pos="0 0 0.1"/>
+            </body>
+          </worldbody>
+        </mujoco>
+        """.strip()
+    )
+
+    result = import_mjcf(fixture)
+    system = result.project.systems[0]
+    humerus = next(link for link in system.links if link.id == "humerus")
+    mesh_asset = next(asset for asset in result.project.assets.items if asset.id == "humerus_mesh")
+
+    assert humerus.asset_ids == ["humerus_mesh"]
+    assert mesh_asset.role is AssetRole.VISUAL
+    assert mesh_asset.annotations["mjcf_geom_pos"] == "0 0 0.1"

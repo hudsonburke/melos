@@ -368,11 +368,11 @@ def solve_axis_aligned_similarity(
 ) -> SimilarityTransform:
     common = [key for key in source_points if key in target_points]
     if not common:
-        return {
-            "rotation": ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
-            "scale": 1.0,
-            "translation": (0.0, 0.0, 0.0),
-        }
+        return SimilarityTransform(
+            rotation=((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
+            scale=1.0,
+            translation=(0.0, 0.0, 0.0),
+        )
 
     source = [source_points[key] for key in common]
     target = [target_points[key] for key in common]
@@ -407,7 +407,7 @@ def solve_axis_aligned_similarity(
         target_centroid[1] - (scale * apply_rotation(source_centroid, rotation)[1]),
         target_centroid[2] - (scale * apply_rotation(source_centroid, rotation)[2]),
     )
-    return {"rotation": rotation, "scale": scale, "translation": translation}
+    return SimilarityTransform(rotation=rotation, scale=scale, translation=translation)
 
 
 def solve_body_frame_similarity(
@@ -445,7 +445,7 @@ def solve_body_frame_similarity(
     else:
         scale = 1.0
     translation = sub(target_centroid, scale_vec(apply_rotation(source_centroid, rotation), scale))
-    return {"rotation": rotation, "scale": scale, "translation": translation}
+    return SimilarityTransform(rotation=rotation, scale=scale, translation=translation)
 
 
 def solve_body_frame_rotation(
@@ -470,11 +470,11 @@ def frame_basis(
 
 
 def apply_similarity(point: tuple[float, float, float], similarity: SimilarityTransform) -> tuple[float, float, float]:
-    rotated = apply_rotation(point, similarity["rotation"])
+    rotated = apply_rotation(point, similarity.rotation)
     return (
-        rotated[0] * similarity["scale"] + similarity["translation"][0],
-        rotated[1] * similarity["scale"] + similarity["translation"][1],
-        rotated[2] * similarity["scale"] + similarity["translation"][2],
+        rotated[0] * similarity.scale + similarity.translation[0],
+        rotated[1] * similarity.scale + similarity.translation[1],
+        rotated[2] * similarity.scale + similarity.translation[2],
     )
 
 

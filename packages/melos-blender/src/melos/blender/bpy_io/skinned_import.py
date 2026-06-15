@@ -3,7 +3,17 @@ from __future__ import annotations
 import importlib
 from typing import Any, Callable
 
-from melos.core.common.transforms import multiply_quaternions
+from melos.core.common.transforms import (
+    axis_angle_to_quat,
+    multiply_quaternions,
+    quaternion_conjugate,
+    rotate_vector,
+    vec3_add,
+    vec3_length,
+    vec3_normalize,
+    vec3_scale,
+    vec3_sub,
+)
 from melos.core.common.types import Transform
 from melos.core.kinematics.pose import evaluate_system_world_transforms
 from melos.core.system.enums import SystemRole
@@ -293,7 +303,7 @@ def _joint_delta(
             if coord.kind != CoordinateKind.ROTATION:
                 continue
             value = coordinate_values.get(coord.id, coord.default_value)
-            total_rotation = multiply_quaternions(total_rotation, _axis_angle_to_quat(coord.axis, value))
+            total_rotation = multiply_quaternions(total_rotation, axis_angle_to_quat(coord.axis, value))
         return Transform(translation=(0.0, 0.0, 0.0), rotation=total_rotation)
 
     if kind == JointKind.PRISMATIC:
@@ -312,19 +322,6 @@ def _joint_delta(
         return Transform(translation=(tx, ty, tz), rotation=(1.0, 0.0, 0.0, 0.0))
 
     return Transform.identity()
-
-
-def _axis_angle_to_quat(axis: tuple[float, float, float], angle: float) -> tuple[float, float, float, float]:
-    from math import cos, sin
-
-    ax, ay, az = axis
-    norm = (ax * ax + ay * ay + az * az) ** 0.5
-    if norm == 0.0:
-        return (1.0, 0.0, 0.0, 0.0)
-    ax, ay, az = ax / norm, ay / norm, az / norm
-    half = angle * 0.5
-    s = sin(half)
-    return (cos(half), ax * s, ay * s, az * s)
 
 
 def _build_parent_map(system: Any) -> dict[str, str]:
@@ -363,7 +360,7 @@ def _default_bone_tail(
     head = _bone_anchor_position(link_id, world_transforms, reference_body_anchors)
     if reference_body_tail_points is not None and link_id in reference_body_tail_points:
         tail_point = reference_body_tail_points[link_id]
-        if _vec_length(_vec_sub(tail_point, head)) > 1e-6:
+        if vec3_length(vec3_sub(tail_point, head)) > 1e-6:
             return tail_point
     children = child_map.get(link_id, [])
     if children:
@@ -378,20 +375,20 @@ def _default_bone_tail(
                 sum(point[1] for point in child_points) / len(child_points),
                 sum(point[2] for point in child_points) / len(child_points),
             )
-            if _vec_length(_vec_sub(avg, head)) > 1e-6:
+            if vec3_length(vec3_sub(avg, head)) > 1e-6:
                 return avg
 
     parent_id = parent_map.get(link_id)
     if parent_id is not None and parent_id in world_transforms:
         parent_point = _bone_anchor_position(parent_id, world_transforms, reference_body_anchors)
-        direction = _vec_normalize(_vec_sub(head, parent_point))
-        if _vec_length(direction) > 1e-6:
-            return _vec_add(head, _vec_scale(direction, 0.05))
+        direction = vec3_normalize(vec3_sub(head, parent_point))
+        if vec3_length(direction) > 1e-6:
+            return vec3_add(head, vec3_scale(direction, 0.05))
 
     if reference_body_tail_dirs is not None and link_id in reference_body_tail_dirs:
-        direction = _vec_normalize(reference_body_tail_dirs[link_id])
-        if _vec_length(direction) > 1e-6:
-            return _vec_add(head, _vec_scale(direction, 0.05))
+        direction = vec3_normalize(reference_body_tail_dirs[link_id])
+        if vec3_length(direction) > 1e-6:
+            return vec3_add(head, vec3_scale(direction, 0.05))
 
     return (head[0], head[1] + 0.05, head[2])
 
@@ -454,53 +451,6 @@ def _resolve_skin_target_system(project: Any, skin_attachment: Any | None = None
     if systems:
         return systems[0]
     raise ValueError("Project does not contain any systems.")
-
-
-def _vec_add(a: tuple[float, float, float], b: tuple[float, float, float]) -> tuple[float, float, float]:
-    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
-
-
-def _vec_sub(a: tuple[float, float, float], b: tuple[float, float, float]) -> tuple[float, float, float]:
-    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
-
-
-def _vec_scale(v: tuple[float, float, float], scalar: float) -> tuple[float, float, float]:
-    return (v[0] * scalar, v[1] * scalar, v[2] * scalar)
-
-
-def _vec_length(v: tuple[float, float, float]) -> float:
-    return (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) ** 0.5
-
-
-def _vec_normalize(v: tuple[float, float, float]) -> tuple[float, float, float]:
-    length = _vec_length(v)
-    if length < 1e-8:
-        return (0.0, 0.0, 0.0)
-    return (v[0] / length, v[1] / length, v[2] / length)
-
-
-def _quat_multiply(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
-    aw, ax, ay, az = a
-    bw, bx, by, bz = b
-    return (
-        aw * bw - ax * bx - ay * by - az * bz,
-        aw * bx + ax * bw + ay * bz - az * by,
-        aw * by - ax * bz + ay * bw + az * bx,
-        aw * bz + ax * by - ay * bx + az * bw,
-    )
-
-
-def _quat_conjugate(q: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
-    return (q[0], -q[1], -q[2], -q[3])
-
-
-def _quat_rotate(q: tuple[float, float, float, float], v: tuple[float, float, float]) -> tuple[float, float, float]:
-    rotated = _quat_multiply(_quat_multiply(q, (0.0, v[0], v[1], v[2])), _quat_conjugate(q))
-    return (rotated[1], rotated[2], rotated[3])
-
-
-def rotate_vector_by_quaternion(q: tuple[float, float, float, float], v: tuple[float, float, float]) -> tuple[float, float, float]:
-    return _quat_rotate(q, v)
 
 
 def _build_mesh_data(
@@ -647,6 +597,11 @@ class _FakeModifier:
         self.name = name
         self.type = type
         self.object: Any = None
+
+
+def rotate_vector_by_quaternion(q: tuple[float, float, float, float], v: tuple[float, float, float]) -> tuple[float, float, float]:
+    """Rotate vector *v* by quaternion *q*. public API wrapper."""
+    return rotate_vector(q, v)
 
 
 __all__ = [

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TypeAlias
+from melos.core.common.ids import Identifier
 
-MuscleId: TypeAlias = str
-MusclePathPointId: TypeAlias = str
-WrapGeometryId: TypeAlias = str
+# ponytail: these remain as re-exports for the muscle __init__.py public API
+MuscleId = Identifier
+MusclePathPointId = Identifier
+WrapGeometryId = Identifier

@@ -1,14 +1,16 @@
 {
   "include": [
-    "melos-core/src",
-    "melos-core/tests",
-    "melos-blender/src",
-    "melos-mujoco/src"
+    "packages/melos-core/src",
+    "packages/melos-core/tests",
+    "packages/melos-blender/src",
+    "packages/melos-sim/src",
+    "packages/melos-skin/src"
   ],
   "extraPaths": [
-    "melos-core/src",
-    "melos-blender/src",
-    "melos-mujoco/src"
+    "packages/melos-core/src",
+    "packages/melos-blender/src",
+    "packages/melos-sim/src",
+    "packages/melos-skin/src"
   ],
   "pythonVersion": "3.12"
 }

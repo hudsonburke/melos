@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from melos.core.common.ids import LandmarkId, LinkId, SiteId
+from melos.core.common.ids import Identifier
 from melos.core.common.metadata import AnnotationMap
 from melos.core.common.types import Vec3, ZERO_VEC3
 from melos.core.common.units import ANGLE_UNIT, FORCE_UNIT, LENGTH_UNIT
 from .enums import MusclePathPointKind
 from .geometry import MuscleGeometry, MuscleSimulationHints
-from .ids import MuscleId, MusclePathPointId, WrapGeometryId
+from .ids import MuscleId, MusclePathPointId
 
 
 @dataclass(slots=True, kw_only=True)
@@ -32,9 +32,9 @@ class MusclePathPoint:
     id: MusclePathPointId
     name: str
     kind: MusclePathPointKind
-    link_id: LinkId | None = None
-    site_id: SiteId | None = None
-    landmark_id: LandmarkId | None = None
+    link_id: Identifier | None = None
+    site_id: Identifier | None = None
+    landmark_id: Identifier | None = None
     position: Vec3 = field(default=ZERO_VEC3, metadata={"unit": LENGTH_UNIT})
     description: str = ""
     annotations: AnnotationMap = field(default_factory=dict)
@@ -45,7 +45,7 @@ class MusclePath:
     """Canonical line-of-action definition for a muscle."""
 
     points: list[MusclePathPoint] = field(default_factory=list)
-    wrap_geometry_ids: list[WrapGeometryId] = field(default_factory=list)
+    wrap_geometry_ids: list[Identifier] = field(default_factory=list)
     description: str = ""
     annotations: AnnotationMap = field(default_factory=dict)
 

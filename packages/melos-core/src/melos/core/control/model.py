@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from melos.core.common.ids import SignalId
+from melos.core.common.ids import Identifier
 from melos.core.common.metadata import AnnotationMap
 
 
@@ -12,7 +12,7 @@ from melos.core.common.metadata import AnnotationMap
 class ObservationChannel:
     """Named observation exposed to controllers or analysis tools."""
 
-    id: SignalId
+    id: Identifier
     name: str
     source_ref: str
     unit: str = ""
@@ -24,7 +24,7 @@ class ObservationChannel:
 class CommandChannel:
     """Named command accepted by the simulated or physical system."""
 
-    id: SignalId
+    id: Identifier
     name: str
     target_ref: str
     unit: str = ""

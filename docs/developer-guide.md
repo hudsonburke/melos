@@ -31,11 +31,26 @@ python3 -m pip install -e ./packages/melos-sim
 ```
 
 ### Running Tests
-Core tests live in `packages/melos-core/tests/` and cover core logic, Blender builders, MuJoCo compilation, and anatomical-system scaling.
+
+Core tests live in `packages/melos-core/tests/` and cover core logic, Blender builders, MuJoCo compilation, and anatomical-system scaling. The root `pyproject.toml` defines a safe default test surface:
+
 ```bash
-python3 -m pytest packages/melos-core/tests/ -v
+python3 -m pytest
 ```
-A successful environment should pass all 258 tests.
+
+Run the broad package suite before merging cross-package work:
+
+```bash
+python3 -m pytest packages/melos-core/tests packages/melos-sim \
+  packages/melos-skin/tests packages/melos-blender/tests
+```
+
+Optional heavy integrations skip automatically unless their extras are installed.
+
+## Focused Developer Guides
+
+- `docs/core-developer-guide.md`: extending core dataclasses, validation, JSON I/O, and scaling.
+- `docs/blender-developer-guide.md`: extending Blender scene tagging, operators, panels, bpy_io builders/importers, and fake-bpy tests.
 
 ## Coding Conventions
 
@@ -96,16 +111,17 @@ The standard test pattern involves creating a `FakeObject` with specific tags, p
 
 ## Adding New Entity Types
 
-To implement a new entity type, follow these steps:
-1. Define the model in `melos.core` using dataclasses, enums, and ID aliases.
+To implement a new authorable entity type, follow these steps:
+
+1. Define the canonical model in `melos.core` using dataclasses, enums, and ID aliases.
 2. Implement validation logic in the core validation modules.
-3. Ensure JSON serialization is handled (usually automatic via internal structuring logic).
-4. Define Blender constants like `ENTITY_KIND` and property keys in the Blender `constants.py`.
-5. Create a `bpy_io` builder function to convert scene objects to core models.
-6. Create a `bpy_io` importer function to convert core models back to scene objects.
+3. Ensure JSON serialization is handled, usually by adding defaulted dataclass fields and round-trip tests.
+4. Define Blender constants such as entity-kind and property keys in `melos.blender.constants`.
+5. Create or update a `bpy_io` builder to convert tagged scene objects to core models.
+6. Create or update `bpy_io.importer` to convert core models back to tagged scene objects.
 7. Implement Blender operators for entity creation.
-8. Add the necessary panel UI elements.
-9. Add MuJoCo compiler support in `melos-mujoco` if the entity has a simulation representation.
+8. Add panel UI elements for the operator settings.
+9. Add MuJoCo compiler support in `melos-sim` if the entity has a simulation representation.
 10. Write tests for every layer of the implementation.
 
 ## Test File Organization

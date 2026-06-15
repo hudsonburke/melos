@@ -1,6 +1,6 @@
 # melos.core API Reference
 
-This reference covers the canonical core API used by the current melos architecture.
+This reference covers the canonical core API used by the current melos architecture. For contributor workflow and extension rules, see `docs/core-developer-guide.md`.
 
 ## Core project model
 
@@ -56,8 +56,7 @@ class SystemModel:
     geometries: list[Geometry] = field(default_factory=list)
     actuators: list[Actuator] = field(default_factory=list)
     sensors: list[Sensor] = field(default_factory=list)
-    profile: dict[str, object] = field(default_factory=dict)
-    annotations: dict[str, object] = field(default_factory=dict)
+    annotations: AnnotationMap = field(default_factory=dict)
 ```
 
 Supporting dataclasses:
@@ -68,6 +67,8 @@ Supporting dataclasses:
 - `Geometry`
 - `Actuator`
 - `Sensor`
+- `RouteNode`
+- `CableParameters`
 - `AssemblyEndpoint`
 - `AssemblyConnection`
 - `CoordinateCoupling`
@@ -82,6 +83,32 @@ Key enums:
 - `InterfaceKind`
 - `ConnectionKind`
 - `ConstraintPolicy`
+- `RouteNodeKind`
+
+
+## Routed actuators
+
+`Actuator.route` stores ordered `RouteNode` values for cable, tendon, and muscle-like paths.
+
+```python
+@dataclass(slots=True, kw_only=True)
+class RouteNode:
+    kind: RouteNodeKind = RouteNodeKind.SITE
+    site_id: SiteId | None = None
+    geometry_id: GeometryId | None = None
+    side_site_id: SiteId | None = None
+
+@dataclass(slots=True, kw_only=True)
+class CableParameters:
+    rest_length: float | None = None
+    stiffness: float = 0.0
+    damping: float = 0.0
+    pre_tension: float = 0.0
+    width: float | None = None
+    length_range: Bounds | None = None
+```
+
+Use `RouteNodeKind.SITE` with `site_id` for anchored waypoints. Use `RouteNodeKind.WRAP` with `geometry_id` and optional `side_site_id` for wrap geometry nodes. Cable-specific physical parameters belong in `Actuator.cable`.
 
 ## Skin attachments
 

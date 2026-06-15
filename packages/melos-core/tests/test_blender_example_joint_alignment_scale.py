@@ -35,4 +35,4 @@ def test_compute_skin_joint_alignment_keeps_small_metric_scale() -> None:
 
     alignment = _compute_skin_joint_alignment(skin_joints, world_transforms, translation_map)
 
-    assert alignment["scale"] == pytest.approx(0.01)
+    assert alignment.scale == pytest.approx(0.01)

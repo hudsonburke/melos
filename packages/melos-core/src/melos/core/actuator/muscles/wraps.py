@@ -5,12 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TypeAlias
 
-from melos.core.common.ids import AssetId, LinkId, SiteId
+from melos.core.common.ids import Identifier
 from melos.core.common.metadata import AnnotationMap
 from melos.core.common.types import Transform
 from melos.core.common.units import LENGTH_UNIT
 from .enums import WrapGeometryKind
-from .ids import WrapGeometryId
 
 
 @dataclass(slots=True, kw_only=True)
@@ -62,13 +61,13 @@ class WrapGeometry:
     schema is easier to validate and compile downstream.
     """
 
-    id: WrapGeometryId
+    id: Identifier
     name: str
     kind: WrapGeometryKind
-    link_id: LinkId | None = None
-    site_id: SiteId | None = None
+    link_id: Identifier | None = None
+    site_id: Identifier | None = None
     transform: Transform = field(default_factory=Transform.identity)
     parameters: WrapParameters = None
-    asset_id: AssetId | None = None
+    asset_id: Identifier | None = None
     description: str = ""
     annotations: AnnotationMap = field(default_factory=dict)

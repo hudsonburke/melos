@@ -39,7 +39,7 @@ def test_compute_joint_alignment_similarity_keeps_small_metric_scale() -> None:
 
     alignment = compute_joint_alignment_similarity(skin_joints, world_transforms, translation_map)
 
-    assert alignment["scale"] == pytest.approx(0.01)
+    assert alignment.scale == pytest.approx(0.01)
 
 
 def test_compute_reference_alignment_similarity_matches_head_axis() -> None:
@@ -87,5 +87,5 @@ def test_compute_reference_alignment_similarity_matches_head_axis() -> None:
 
     assert mapped_norm > 0.0
     assert target_norm > 0.0
-    assert similarity["scale"] > 0.0
+    assert similarity.scale > 0.0
     assert dot / (mapped_norm * target_norm) > 0.99

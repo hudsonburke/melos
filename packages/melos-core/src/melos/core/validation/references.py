@@ -166,6 +166,26 @@ def validate_references(project: Project) -> list[ValidationIssue]:
                 location=f"systems[{system.id}].actuators[{actuator.id}].site_ids",
                 label="Actuator site",
             )
+            actuator_location = f"systems[{system.id}].actuators[{actuator.id}]"
+            for index, node in enumerate(actuator.route):
+                require_exists(
+                    node.site_id,
+                    site_ids,
+                    location=f"{actuator_location}.route[{index}].site_id",
+                    label="Route site",
+                )
+                require_exists(
+                    node.geometry_id,
+                    geometry_ids,
+                    location=f"{actuator_location}.route[{index}].geometry_id",
+                    label="Route wrap geometry",
+                )
+                require_exists(
+                    node.side_site_id,
+                    site_ids,
+                    location=f"{actuator_location}.route[{index}].side_site_id",
+                    label="Route side site",
+                )
 
         for sensor in system.sensors:
             require_exists(

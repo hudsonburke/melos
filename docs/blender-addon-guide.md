@@ -2,6 +2,8 @@
 
 This guide documents the melos.blender addon, a tool for visually authoring melos projects within Blender.
 
+For implementation patterns and extension checklists, see `docs/blender-developer-guide.md`.
+
 ## 1. Overview
 
 The melos.blender addon serves as a visual authoring layer for the melos.core modeling framework. It allows researchers and developers to define biomechanical anatomicals, robotic devices, muscle paths, and complex assemblies using Blender's native 3D environment.
@@ -75,6 +77,7 @@ The addon recognizes a fixed set of entity kinds. Many still use body/device ter
 * `device_joint`: A joint connecting two device frames.
 * `device_sensor`: A sensor attached to a device.
 * `device_actuator`: An actuator driving a device joint.
+* `device_cable_route_point`: An ordered route waypoint for a cable actuator.
 * `device_interface`: A communication interface for the device.
 * `muscle_path_point`: A point (origin, insertion, or way-point) in a muscle path.
 * `muscle_wrap_geometry`: A geometry primitive for muscle wrapping.
@@ -83,13 +86,14 @@ The addon recognizes a fixed set of entity kinds. Many still use body/device ter
 
 ### Property Constants
 
-Entity properties are stored as custom properties on Blender objects. There are over 70 constants defined in `constants.py`. Key examples include:
+Entity properties are stored as custom properties on Blender objects. Key examples include:
 
-* **Bodies**: `BODY_MASS_KEY`, `BODY_CENTER_OF_MASS_KEY`, `BODY_INERTIA_KEY`
-* **Frames**: `FRAME_BODY_ID_KEY`, `FRAME_IS_ANATOMICAL_KEY`
-* **Joints**: `JOINT_KIND_KEY`, `JOINT_PARENT_BODY_ID_KEY`, `JOINT_CHILD_BODY_ID_KEY`, `JOINT_PARENT_FRAME_ID_KEY`, `JOINT_CHILD_FRAME_ID_KEY`
+* **Links**: `BODY_MASS_KEY`, `BODY_CENTER_OF_MASS_KEY`, `BODY_INERTIA_KEY`, `DEVICE_LINK_ID_KEY`
+* **Frames/Sites**: `FRAME_LINK_ID_KEY`, `FRAME_IS_ANATOMICAL_KEY`, `DEVICE_FRAME_LINK_ID_KEY`
+* **Joints**: `JOINT_KIND_KEY`, `JOINT_PARENT_LINK_ID_KEY`, `JOINT_CHILD_LINK_ID_KEY`, `JOINT_PARENT_FRAME_ID_KEY`, `JOINT_CHILD_FRAME_ID_KEY`
 * **Sensors**: `DEVICE_SENSOR_KIND_KEY`, `DEVICE_SENSOR_FRAME_ID_KEY`, `DEVICE_SENSOR_LINK_ID_KEY`
-* **Muscles**: `MUSCLE_ID_KEY`, `MUSCLE_PATH_POINT_KIND_KEY`, `MUSCLE_PATH_POINT_BODY_ID_KEY`
+* **Muscles**: `MUSCLE_ID_KEY`, `MUSCLE_PATH_POINT_KIND_KEY`, `MUSCLE_PATH_POINT_LINK_ID_KEY`, `MUSCLE_PATH_POINT_SITE_ID_KEY`
+* **Cable Routes**: `CABLE_ACTUATOR_ID_KEY`, `CABLE_ROUTE_ORDER_KEY`, `CABLE_ROUTE_NODE_KIND_KEY`, `CABLE_ROUTE_SITE_ID_KEY`, `CABLE_ROUTE_GEOMETRY_ID_KEY`, `CABLE_ROUTE_SIDE_SITE_ID_KEY`
 
 Object names in Blender are treated as display labels. The canonical, stable IDs used by the core models are stored exclusively in the `melos_id` custom property.
 
@@ -115,6 +119,7 @@ Object names in Blender are treated as display labels. The canonical, stable IDs
 * **MELOS_OT_create_device_joint**: Creates an Empty tagged as `device_joint`.
 * **MELOS_OT_create_device_sensor**: Creates an Empty tagged as `device_sensor`.
 * **MELOS_OT_create_device_actuator**: Creates an Empty tagged as `device_actuator`.
+* **MELOS_OT_create_cable_route_point**: Creates an Empty tagged as `device_cable_route_point` for ordered cable/tendon routes.
 
 ### Muscle Operators
 
@@ -154,7 +159,7 @@ The melos tab in the sidebar contains several panels for data entry and operator
 
 * **Project Panel**: Contains global project metadata (ID, name, description, created_by), simulation settings (time_step, gravity), and the export path. Includes buttons for export and validation.
 * **Anatomical System Panel**: Fields for defining anatomical-level data (ID, name, species) and tools for creating bodies, frames, and joints.
-* **Device Panel**: Fields for device ID and name. Tools for creating device links, frames, joints, sensors, and actuators.
+* **Device Panel**: Fields for device ID and name. Tools for creating device links, frames, joints, sensors, actuators, and cable route points.
 * **Muscle Panel**: Fields for muscle ID. Tools for creating muscle path points and wrap geometries.
 * **Assembly Panel**: Tools for creating attachments, specifying the `device_id`, `interface_id`, and `anatomical_site_id`.
 * **Landmark Panel**: Tools for creating landmarks, including name, target body ID, and description.
@@ -200,7 +205,7 @@ If your scaling input comes from an external source such as marker-based joint e
 
 ## 9. Addon Properties
 
-The `MELOSAddonSettings` class contains approximately 65 properties that store scene-level configuration. These properties are accessible via `context.scene.melos_settings`.
+The `MELOSAddonSettings` class stores scene-level configuration at `context.scene.melos_blender`.
 
 * **Project**: `project_id`, `project_name`, `project_description`, `created_by`.
 * **Anatomical System**: `anatomical_id`, `anatomical_name`, `anatomical_description`, `anatomical_species`, `anatomical_root_link_id`.
@@ -215,13 +220,14 @@ The `MELOSAddonSettings` class contains approximately 65 properties that store s
   * Device Coordinates: `device_coordinate_name`, `device_coordinate_id`, `device_coordinate_kind`, `device_coordinate_axis_x/y/z`.
   * Sensors: `new_device_sensor_name`, `new_device_sensor_id`, `device_sensor_kind`, `device_sensor_frame_id`, `device_sensor_link_id`.
   * Actuators: `new_device_actuator_name`, `new_device_actuator_id`, `device_actuator_kind`, `device_actuator_joint_id`, `device_actuator_coordinate_id`.
+  * Cable Routes: `new_cable_route_name`, `new_cable_route_id`, `cable_actuator_id`, `cable_route_node_kind`, `cable_route_order`, `cable_route_site_id`, `cable_route_geometry_id`, `cable_route_side_site_id`.
 * **Muscle Fields**: `muscle_id`, `muscle_name`, `new_path_point_name`, `new_path_point_id`, `path_point_kind`, `path_point_body_id`, `path_point_frame_id`, `path_point_order`.
   * Wraps: `new_wrap_name`, `new_wrap_id`, `wrap_kind`, `wrap_body_id`, `wrap_frame_id`, `wrap_radius`, `wrap_height`.
 * **Assembly Fields**: `assembly_id`, `assembly_name`, `new_attachment_name`, `new_attachment_id`, `attachment_device_id`, `attachment_interface_id`, `attachment_anatomical_site_id`.
 * **Landmark Fields**: `new_landmark_name`, `new_landmark_id`, `landmark_body_id`, `landmark_frame_id`.
 * **Export**: `export_path`.
 
-## 11. Skin Reference Data
+## 10. Skin Reference Data
 
 The current example workflow can create non-export reference data used to visualize skin-fitting inputs alongside the canonical project.
 
@@ -229,7 +235,7 @@ The current example workflow can create non-export reference data used to visual
 * **Exclusion from Export**: Reference objects carry a `skin_reference=True` custom property. The standard project export builder identifies and excludes these objects so the exported `Project` remains canonical.
 * **Scope**: This is an example-workflow visualization aid, not a separate canonical project import format.
 
-## 12. Authoring Conventions
+## 11. Authoring Conventions
 
 To maintain a consistent and valid model, follow these conventions:
 

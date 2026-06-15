@@ -1,15 +1,16 @@
-"""MJCF body hierarchy and inertial mapper for ``melos.sim.mujoco.importers``."""
+"""ElementTree MJCF body hierarchy and inertial mapper fallback."""
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any
+from xml.etree.ElementTree import Element
 
 from melos.core.common.mechanics import InertialProperties
 from melos.core.common.types import Transform
 from melos.core.system.model import Link
 
+from .defaults import DefaultClassMap, apply_defaults, get_active_class
 from .report import ImportReport
 
 
@@ -17,7 +18,8 @@ from .report import ImportReport
 class BodyInfo:
     name: str
     parent_name: str | None
-    element: Any
+    element: Element
+    child_class: str | None = None
 
 
 BodyTree = dict[str, BodyInfo]
@@ -35,31 +37,44 @@ def euler_to_quat(euler_str: str) -> tuple[float, float, float, float]:
     return (w, x, y, z)
 
 
-def _parse_inertial(body: Any) -> InertialProperties | None:
-    inertial_el = getattr(body, "inertial", None)
+def _parse_inertial(element: Element) -> InertialProperties | None:
+    inertial_el = element.find("inertial")
     if inertial_el is None:
         return None
 
-    mass = float(inertial_el.mass) if getattr(inertial_el, "mass", None) is not None else None
-    com = _vec3_tuple(getattr(inertial_el, "pos", None))
-    inertia = _vecn_tuple(getattr(inertial_el, "fullinertia", None), expected=6)
+    mass_str = inertial_el.get("mass")
+    pos_str = inertial_el.get("pos")
+    fullinertia_str = inertial_el.get("fullinertia")
+
+    mass = float(mass_str) if mass_str is not None else None
+
+    com = None
+    if pos_str is not None:
+        parts = pos_str.split()
+        com = (float(parts[0]), float(parts[1]), float(parts[2]))
+
+    inertia = None
+    if fullinertia_str is not None:
+        parts = fullinertia_str.split()
+        inertia = (
+            float(parts[0]),
+            float(parts[1]),
+            float(parts[2]),
+            float(parts[3]),
+            float(parts[4]),
+            float(parts[5]),
+        )
+
     return InertialProperties(mass=mass, center_of_mass=com, inertia_about_com=inertia)
 
 
-def _collect_mesh_asset_ids(body: Any) -> list[str]:
+def _collect_mesh_asset_ids(element: Element) -> list[str]:
     ids: list[str] = []
-    for geom in getattr(body, "geom", []):
-        _commit_defaults_if_supported(geom)
-        if str(getattr(geom, "type", "")) != "mesh":
-            continue
-        mesh = getattr(geom, "mesh", None)
-        mesh_name = getattr(mesh, "name", None)
-        if mesh_name is not None:
-            ids.append(str(mesh_name))
-            continue
-        mesh_name = _get_xml_attr(geom, "mesh")
-        if mesh_name is not None:
-            ids.append(mesh_name)
+    for child in element:
+        if child.tag == "geom":
+            mesh_name = child.get("mesh")
+            if mesh_name is not None:
+                ids.append(mesh_name)
     return ids
 
 
@@ -125,23 +140,23 @@ def _zaxis_to_quat(zx: float, zy: float, zz: float) -> tuple[float, float, float
     return _xyaxes_to_quat(xx, xy, xz, yx, yy, yz)
 
 
-def _build_quat_annotation(element: Any) -> str | None:
-    quat_str = _get_xml_attr(element, "quat")
+def _build_quat_annotation(element: Element) -> str | None:
+    quat_str = element.get("quat")
     if quat_str is not None:
         return quat_str
 
-    euler_str = _get_xml_attr(element, "euler")
+    euler_str = element.get("euler")
     if euler_str is not None:
         w, x, y, z = euler_to_quat(euler_str)
         return f"{w} {x} {y} {z}"
 
-    axisangle_str = _get_xml_attr(element, "axisangle")
+    axisangle_str = element.get("axisangle")
     if axisangle_str is not None:
         parts = axisangle_str.split()
         w, x, y, z = _axisangle_to_quat(float(parts[0]), float(parts[1]), float(parts[2]), float(parts[3]))
         return f"{w} {x} {y} {z}"
 
-    xyaxes_str = _get_xml_attr(element, "xyaxes")
+    xyaxes_str = element.get("xyaxes")
     if xyaxes_str is not None:
         parts = xyaxes_str.split()
         w, x, y, z = _xyaxes_to_quat(
@@ -150,7 +165,7 @@ def _build_quat_annotation(element: Any) -> str | None:
         )
         return f"{w} {x} {y} {z}"
 
-    zaxis_str = _get_xml_attr(element, "zaxis")
+    zaxis_str = element.get("zaxis")
     if zaxis_str is not None:
         parts = zaxis_str.split()
         w, x, y, z = _zaxis_to_quat(float(parts[0]), float(parts[1]), float(parts[2]))
@@ -170,14 +185,19 @@ def _parse_quat(s: str) -> tuple[float, float, float, float]:
 
 
 def _walk_bodies(
-    body_parent: Any,
+    element: Element,
     parent_name: str | None,
+    parent_class: str | None,
+    defaults: DefaultClassMap,
     report: ImportReport,
     links_out: list[Link],
     tree_out: BodyTree,
 ) -> None:
-    for child in getattr(body_parent, "body", []):
-        name = getattr(child, "name", None)
+    for child in element:
+        if child.tag != "body":
+            continue
+
+        name = child.get("name")
         if not name:
             report.add_warning(
                 code="MISSING_BODY_NAME",
@@ -186,11 +206,14 @@ def _walk_bodies(
             )
             continue
 
+        active_class = get_active_class(child, parent_class)
+        apply_defaults(child, active_class, defaults)
+
         inertial = _parse_inertial(child)
         asset_ids = _collect_mesh_asset_ids(child)
 
         annotations: dict[str, str] = {}
-        pos_str = _get_xml_attr(child, "pos")
+        pos_str = child.get("pos")
         if pos_str is not None:
             annotations["mjcf_pos"] = pos_str
         if parent_name is not None:
@@ -204,50 +227,26 @@ def _walk_bodies(
         quat_vec = _parse_quat(quat_annotation) if quat_annotation is not None else (1.0, 0.0, 0.0, 0.0)
 
         link = Link(
-            id=str(name),
-            name=str(name),
+            id=name,
+            name=name,
             transform=Transform(translation=pos_vec, rotation=quat_vec),
             inertial=inertial,
             asset_ids=asset_ids,
             annotations=annotations,
         )
         links_out.append(link)
-        tree_out[str(name)] = BodyInfo(name=str(name), parent_name=parent_name, element=child)
-        _walk_bodies(child, str(name), report, links_out, tree_out)
+
+        child_class = child.get("childclass", active_class)
+        tree_out[name] = BodyInfo(name=name, parent_name=parent_name, element=child, child_class=child_class)
+        _walk_bodies(child, name, child_class, defaults, report, links_out, tree_out)
 
 
 def map_bodies(
-    worldbody: Any,
+    worldbody: Element,
+    defaults: DefaultClassMap,
     report: ImportReport,
 ) -> tuple[list[Link], BodyTree]:
     links: list[Link] = []
     tree: BodyTree = {}
-    _walk_bodies(worldbody, None, report, links, tree)
+    _walk_bodies(worldbody, None, None, defaults, report, links, tree)
     return links, tree
-
-
-def _commit_defaults_if_supported(element: Any) -> None:
-    _ = element
-    return
-
-
-def _get_xml_attr(element: Any, attribute_name: str) -> str | None:
-    get_attribute_xml_string = getattr(element, "get_attribute_xml_string", None)
-    if callable(get_attribute_xml_string):
-        return get_attribute_xml_string(attribute_name)
-    return None
-
-
-def _vec3_tuple(value: object) -> tuple[float, float, float] | None:
-    if value is None:
-        return None
-    return tuple(float(component) for component in value)  # type: ignore[return-value]
-
-
-def _vecn_tuple(value: object, *, expected: int) -> tuple[float, ...] | None:
-    if value is None:
-        return None
-    result = tuple(float(component) for component in value)
-    if len(result) != expected:
-        return None
-    return result

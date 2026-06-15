@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from melos.core.common.ids import CoordinateId
+from melos.core.common.ids import Identifier
 from melos.core.common.types import Bounds, Vec3
 
 from .enums import CoordinateKind
@@ -14,7 +14,7 @@ from .enums import CoordinateKind
 class CoordinateDefinition:
     """Named generalized coordinate associated with a joint."""
 
-    id: CoordinateId
+    id: Identifier
     name: str
     kind: CoordinateKind
     axis: Vec3

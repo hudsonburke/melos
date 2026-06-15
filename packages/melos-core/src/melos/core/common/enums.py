@@ -15,9 +15,3 @@ class AssetRole(StrEnum):
     SIMULATION = "simulation"
     FITTING = "fitting"
     ANALYSIS = "analysis"
-
-
-class CompileTarget(StrEnum):
-    """Simulation backend targets supported by the core model."""
-
-    MUJOCO = "mujoco"

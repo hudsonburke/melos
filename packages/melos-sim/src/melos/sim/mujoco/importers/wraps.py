@@ -1,80 +1,87 @@
-"""MJCF wrap geometry mapper for ``melos.sim.mujoco.importers``."""
+"""ElementTree MJCF wrap geometry mapper fallback."""
 
 from __future__ import annotations
 
-from typing import Any
+from xml.etree.ElementTree import Element
 
 from melos.core.common.types import Transform
 from melos.core.system.enums import GeometryRole
 from melos.core.system.model import Geometry
 
-from .bodies import BodyTree, _build_quat_annotation, _commit_defaults_if_supported
+from .bodies import BodyTree
+from .quat_utils import euler_to_quat
+from .defaults import DefaultClassMap
 from .report import ImportReport
 
 
 def map_wrap_geometries(
-    tendon_section: Any | None,
+    worldbody: Element,
+    tendon_section: Element | None,
     body_tree: BodyTree,
+    defaults: DefaultClassMap,
     report: ImportReport,
 ) -> tuple[list[Geometry], dict[str, str]]:
-    _ = report
+    _ = worldbody, defaults, report
     tendon_geom_names: set[str] = set()
     if tendon_section is not None:
-        for spatial in getattr(tendon_section, "spatial", []):
-            for child in spatial.all_children():
-                if child.tag != "geom":
-                    continue
-                ref = getattr(getattr(child, "geom", None), "name", None)
-                if ref is not None:
-                    tendon_geom_names.add(str(ref))
+        for geom_el in tendon_section.iter("geom"):
+            ref = geom_el.get("geom")
+            if ref is not None:
+                tendon_geom_names.add(ref)
 
     wraps: list[Geometry] = []
 
     for body_info in body_tree.values():
-        for geom_el in getattr(body_info.element, "geom", []):
-            _commit_defaults_if_supported(geom_el)
+        body_el = body_info.element
+        for geom_el in body_el:
+            if geom_el.tag != "geom":
+                continue
 
-            geom_name = getattr(geom_el, "name", None)
+            geom_name = geom_el.get("name")
             if not geom_name:
                 continue
 
-            geom_type = str(getattr(geom_el, "type", None) or "sphere")
+            geom_type = geom_el.get("type", "sphere")
             if geom_type not in ("sphere", "cylinder"):
                 continue
 
-            group = getattr(geom_el, "group", None)
-            contype = getattr(geom_el, "contype", None)
-            conaffinity = getattr(geom_el, "conaffinity", None)
             is_wrap = (
-                str(geom_name) in tendon_geom_names
-                or str(group) == "2"
-                or (str(contype) == "0" and str(conaffinity) == "0")
+                geom_name in tendon_geom_names
+                or geom_el.get("group") == "2"
+                or (geom_el.get("contype") == "0" and geom_el.get("conaffinity") == "0")
             )
             if not is_wrap:
                 continue
 
-            size_values = getattr(geom_el, "size", None)
-            if size_values is None:
-                continue
-            size_parts = [float(s) for s in size_values]
+            size_str = geom_el.get("size", "")
+            size_parts = [float(s) for s in size_str.split()]
             parameters: dict[str, object]
             if geom_type == "sphere":
                 parameters = {"radius": size_parts[0]}
             else:
                 parameters = {"radius": size_parts[0], "height": size_parts[1] * 2.0}
 
+            pos_str = geom_el.get("pos")
+            quat_str = geom_el.get("quat")
+            if quat_str is None and geom_el.get("euler") is not None:
+                w, x, y, z = euler_to_quat(geom_el.get("euler", "0 0 0"))
+                quat_str = f"{w} {x} {y} {z}"
+
             translation = (
-                tuple(float(v) for v in geom_el.pos)
-                if getattr(geom_el, "pos", None) is not None
+                tuple(float(v) for v in pos_str.split())
+                if pos_str is not None
                 else (0.0, 0.0, 0.0)
             )
-            quat_str = _build_quat_annotation(geom_el)
-            rotation = _parse_quat(quat_str) if quat_str is not None else (1.0, 0.0, 0.0, 0.0)
+            rotation = (
+                tuple(float(v) for v in quat_str.split())
+                if quat_str is not None
+                else (1.0, 0.0, 0.0, 0.0)
+            )
 
             wraps.append(
                 Geometry(
-                    id=str(geom_name),
-                    name=str(geom_name),
+                    id=geom_name,
+                    name=geom_name,
                     kind=geom_type,
                     role=GeometryRole.WRAP,
                     link_id=body_info.name,
@@ -85,8 +92,3 @@ def map_wrap_geometries(
 
     geom_name_to_wrap_id: dict[str, str] = {wrap.name: wrap.id for wrap in wraps}
     return wraps, geom_name_to_wrap_id
-
-
-def _parse_quat(s: str) -> tuple[float, float, float, float]:
-    parts = s.split()
-    return (float(parts[0]), float(parts[1]), float(parts[2]), float(parts[3]))

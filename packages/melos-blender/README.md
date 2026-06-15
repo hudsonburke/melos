@@ -91,4 +91,4 @@ There is also a GitHub Actions workflow at `.github/workflows/package-blender-ad
 
 ## Getting Started
 
-See `docs/blender-addon-guide.md` for the current developer-oriented setup and authoring workflow.
+See repository-root `docs/blender-addon-guide.md` for addon setup and authoring reference. See `docs/blender-developer-guide.md` for implementation patterns around operators, panels, `bpy_io`, and fake-bpy tests.

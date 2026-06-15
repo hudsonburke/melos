@@ -8,10 +8,12 @@ from pathlib import Path
 from typing import Any, Callable, TypedDict, cast
 
 from melos.core.common.transforms import (
+    compose_transforms,
     multiply_quaternions,
     normalize_quaternion_or_identity,
 )
 from melos.core.common.types import Transform
+from melos.core.retarget.alignment import SimilarityTransform
 from melos.core.validation import validate_project
 
 from melos.blender.bpy_io.project import build_project_from_scene, save_project_from_scene
@@ -46,12 +48,6 @@ class _GeomTransform(TypedDict):
     translation: tuple[float, float, float]
     rotation: tuple[float, float, float, float]
     scale: tuple[float, float, float]
-
-
-class _SimilarityTransform(TypedDict):
-    rotation: tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]
-    scale: float
-    translation: tuple[float, float, float]
 
 
 class MELOS_OT_validate_project(OperatorBase):
@@ -260,11 +256,14 @@ def _create_body_mesh_objects(
     body_objects: dict[str, Any],
     *,
     body_scale_factors: dict[str, float] | None = None,
+    body_display_scale_factors: dict[str, float] | None = None,
+    display_relationship_system: Any | None = None,
     create_mesh_object: Callable[[str, Any, Any], Any] | None = None,
     attach_to_armature: bool = True,
     reference_body_anchors: dict[str, tuple[float, float, float]] | None = None,
     reference_body_tail_points: dict[str, tuple[float, float, float]] | None = None,
     reference_body_tail_dirs: dict[str, tuple[float, float, float]] | None = None,
+    source_body_tail_points: dict[str, tuple[float, float, float]] | None = None,
     display_scale_factor: float = 1.0,
 ) -> list[Any]:
     from melos.blender.bpy_io.skinned_import import (
@@ -285,25 +284,42 @@ def _create_body_mesh_objects(
     body_name_map = {index: body.id for index, body in enumerate(anatomical_system.links)}
     child_map = _build_child_map(anatomical_system)
     parent_map = _build_parent_map(anatomical_system)
+    # Blender should only visualize the dataclass-level retarget plan.  When a
+    # display SystemModel is supplied, use its parent relationships for the
+    # secondary/twist frame of reference-linked meshes while leaving raw MuJoCo
+    # local offsets intact for unmapped child geometry propagation.
+    relationship_parent_map = (
+        _build_parent_map(display_relationship_system)
+        if display_relationship_system is not None
+        else None
+    )
+    display_transforms = _build_example_body_mesh_display_transforms(
+        anatomical_system,
+        world_transforms,
+        child_map,
+        parent_map,
+        relationship_parent_map=relationship_parent_map,
+        reference_body_anchors=reference_body_anchors,
+        reference_body_tail_points=reference_body_tail_points,
+        reference_body_tail_dirs=reference_body_tail_dirs,
+        source_body_tail_points=source_body_tail_points,
+        display_scale_factor=float(display_scale_factor),
+        default_bone_tail=_default_bone_tail,
+    )
     created: list[Any] = []
     effective_body_scale_factors = body_scale_factors or {}
+    effective_body_display_scale_factors = body_display_scale_factors or {}
 
     for body in anatomical_system.links:
         source_transform = world_transforms.get(body.id)
         if source_transform is None:
             continue
-        display_transform = _example_body_mesh_display_transform(
-            body.id,
-            source_transform=source_transform,
-            world_transforms=world_transforms,
-            child_map=child_map,
-            parent_map=parent_map,
-            reference_body_anchors=reference_body_anchors,
-            reference_body_tail_points=reference_body_tail_points,
-            reference_body_tail_dirs=reference_body_tail_dirs,
-            default_bone_tail=_default_bone_tail,
+        display_transform = display_transforms.get(body.id, source_transform)
+        body_display_scale = _positive_finite_float(
+            effective_body_display_scale_factors.get(body.id),
+            default=float(display_scale_factor),
         )
-        body_scale = effective_body_scale_factors.get(body.id, 1.0) * float(display_scale_factor)
+        body_scale = effective_body_scale_factors.get(body.id, 1.0) * body_display_scale
         for asset_id in body.asset_ids:
             asset_record = asset_map.get(asset_id)
             if asset_record is None:
@@ -617,6 +633,123 @@ def _apply_uniform_scale(vertex: tuple[float, float, float], scale: float) -> tu
     return (vertex[0] * scale, vertex[1] * scale, vertex[2] * scale)
 
 
+def _positive_finite_float(value: float | None, *, default: float) -> float:
+    if value is None:
+        return float(default)
+    resolved = float(value)
+    if not math.isfinite(resolved) or resolved <= 1e-8:
+        return float(default)
+    return resolved
+
+
+def _build_example_body_mesh_display_transforms(
+    anatomical_system: Any,
+    world_transforms: dict[str, Any],
+    child_map: dict[str, list[str]],
+    parent_map: dict[str, str],
+    *,
+    reference_body_anchors: dict[str, tuple[float, float, float]] | None = None,
+    reference_body_tail_points: dict[str, tuple[float, float, float]] | None = None,
+    reference_body_tail_dirs: dict[str, tuple[float, float, float]] | None = None,
+    source_body_tail_points: dict[str, tuple[float, float, float]] | None = None,
+    display_scale_factor: float = 1.0,
+    default_bone_tail: Callable[..., tuple[float, float, float]] | None = None,
+    relationship_parent_map: dict[str, str] | None = None,
+) -> dict[str, Transform]:
+    link_by_id = {
+        str(link.id): link
+        for link in getattr(anatomical_system, "links", ()) or ()
+        if getattr(link, "id", None) is not None
+    }
+    cache: dict[str, Transform] = {}
+
+    def _resolve(link_id: str) -> Transform:
+        cached = cache.get(link_id)
+        if cached is not None:
+            return cached
+
+        source_transform = world_transforms.get(link_id)
+        if source_transform is None:
+            resolved = Transform.identity()
+            cache[link_id] = resolved
+            return resolved
+
+        parent_id = parent_map.get(link_id)
+        parent_link = link_by_id.get(parent_id or "")
+        if reference_body_anchors is not None and link_id in reference_body_anchors:
+            secondary_parent_map = relationship_parent_map or parent_map
+            source_parent_point = _nearest_distinct_ancestor_point(
+                link_id,
+                source_transform.translation,
+                secondary_parent_map,
+                lambda ancestor_id: getattr(world_transforms.get(ancestor_id), "translation", None),
+            )
+            display_head = reference_body_anchors.get(link_id, source_transform.translation)
+            display_parent_point = _nearest_distinct_ancestor_point(
+                link_id,
+                display_head,
+                secondary_parent_map,
+                lambda ancestor_id: _resolve(ancestor_id).translation if ancestor_id in link_by_id else None,
+            )
+            resolved = _example_body_mesh_display_transform(
+                link_id,
+                source_transform=source_transform,
+                world_transforms=world_transforms,
+                child_map=child_map,
+                parent_map=parent_map,
+                reference_body_anchors=reference_body_anchors,
+                reference_body_tail_points=reference_body_tail_points,
+                reference_body_tail_dirs=reference_body_tail_dirs,
+                source_body_tail_points=source_body_tail_points,
+                default_bone_tail=default_bone_tail,
+                source_parent_point=source_parent_point,
+                display_parent_point=display_parent_point,
+            )
+            cache[link_id] = resolved
+            return resolved
+
+        if parent_link is not None:
+            parent_display = _resolve(str(parent_link.id))
+            local_transform = getattr(link_by_id.get(link_id), "transform", None)
+            if local_transform is not None:
+                local_translation = tuple(
+                    float(component) * float(display_scale_factor)
+                    for component in getattr(local_transform, "translation", (0.0, 0.0, 0.0))
+                )
+                local_rotation = tuple(
+                    float(component)
+                    for component in getattr(local_transform, "rotation", (1.0, 0.0, 0.0, 0.0))
+                )
+                resolved = compose_transforms(
+                    parent_display,
+                    Transform(translation=local_translation, rotation=local_rotation),
+                )
+                cache[link_id] = resolved
+                return resolved
+
+        resolved = _example_body_mesh_display_transform(
+            link_id,
+            source_transform=source_transform,
+            world_transforms=world_transforms,
+            child_map=child_map,
+            parent_map=parent_map,
+            reference_body_anchors=reference_body_anchors,
+            reference_body_tail_points=reference_body_tail_points,
+            reference_body_tail_dirs=reference_body_tail_dirs,
+            source_body_tail_points=source_body_tail_points,
+            default_bone_tail=default_bone_tail,
+        )
+        cache[link_id] = resolved
+        return resolved
+
+    return {
+        link_id: _resolve(link_id)
+        for link_id in link_by_id
+        if link_id in world_transforms
+    }
+
+
+
 def _example_body_mesh_display_transform(
     body_id: str,
     *,
@@ -627,7 +760,10 @@ def _example_body_mesh_display_transform(
     reference_body_anchors: dict[str, tuple[float, float, float]] | None = None,
     reference_body_tail_points: dict[str, tuple[float, float, float]] | None = None,
     reference_body_tail_dirs: dict[str, tuple[float, float, float]] | None = None,
+    source_body_tail_points: dict[str, tuple[float, float, float]] | None = None,
     default_bone_tail: Callable[..., tuple[float, float, float]] | None = None,
+    source_parent_point: tuple[float, float, float] | None = None,
+    display_parent_point: tuple[float, float, float] | None = None,
 ) -> Transform:
     if (
         not reference_body_anchors
@@ -649,7 +785,10 @@ def _example_body_mesh_display_transform(
     if reference_body_anchors is not None and body_id in reference_body_anchors:
         display_head = tuple(float(value) for value in reference_body_anchors[body_id])
 
-    source_tail = tail_resolver(body_id, world_transforms, child_map, parent_map)
+    if source_body_tail_points is not None and body_id in source_body_tail_points:
+        source_tail = tuple(float(value) for value in source_body_tail_points[body_id])
+    else:
+        source_tail = tail_resolver(body_id, world_transforms, child_map, parent_map)
     display_tail = tail_resolver(
         body_id,
         world_transforms,
@@ -664,12 +803,163 @@ def _example_body_mesh_display_transform(
     source_direction = _vec_sub(source_tail, source_head)
     display_direction = _vec_sub(display_tail, display_head)
     if _vec_length(source_direction) > 1e-8 and _vec_length(display_direction) > 1e-8:
-        align_rotation = _quat_between_vectors(source_direction, display_direction)
+        basis_rotation = _quat_from_basis_alignment(
+            source_direction,
+            _vec_sub(source_parent_point, source_head) if source_parent_point is not None else None,
+            display_direction,
+            _vec_sub(display_parent_point, display_head) if display_parent_point is not None else None,
+        )
+        if basis_rotation is None:
+            basis_rotation = _quat_between_vectors(source_direction, display_direction)
         rotation = normalize_quaternion_or_identity(
-            multiply_quaternions(align_rotation, rotation)
+            multiply_quaternions(basis_rotation, rotation)
         )
 
     return Transform(translation=display_head, rotation=rotation)
+
+
+def _nearest_distinct_ancestor_point(
+    link_id: str,
+    current_point: tuple[float, float, float],
+    parent_map: dict[str, str],
+    point_resolver: Callable[[str], tuple[float, float, float] | None],
+) -> tuple[float, float, float] | None:
+    visited: set[str] = set()
+    ancestor_id = parent_map.get(link_id)
+    while ancestor_id is not None and ancestor_id not in visited:
+        visited.add(ancestor_id)
+        point = point_resolver(ancestor_id)
+        if point is not None and _vec_length(_vec_sub(point, current_point)) > 1e-6:
+            return tuple(float(value) for value in point)
+        ancestor_id = parent_map.get(ancestor_id)
+    return None
+
+
+def _quat_from_basis_alignment(
+    source_primary: tuple[float, float, float],
+    source_secondary_hint: tuple[float, float, float] | None,
+    target_primary: tuple[float, float, float],
+    target_secondary_hint: tuple[float, float, float] | None,
+) -> tuple[float, float, float, float] | None:
+    if source_secondary_hint is None or target_secondary_hint is None:
+        return None
+
+    source_primary_dir = _vec_normalize(source_primary)
+    target_primary_dir = _vec_normalize(target_primary)
+    if _vec_length(source_primary_dir) <= 1e-8 or _vec_length(target_primary_dir) <= 1e-8:
+        return None
+
+    source_secondary_dir = _project_onto_plane(source_secondary_hint, source_primary_dir)
+    target_secondary_dir = _project_onto_plane(target_secondary_hint, target_primary_dir)
+    if _vec_length(source_secondary_dir) <= 1e-8 or _vec_length(target_secondary_dir) <= 1e-8:
+        return None
+
+    source_secondary_dir = _vec_normalize(source_secondary_dir)
+    target_secondary_dir = _vec_normalize(target_secondary_dir)
+    source_tertiary_dir = _vec_normalize(_vec_cross(source_primary_dir, source_secondary_dir))
+    target_tertiary_dir = _vec_normalize(_vec_cross(target_primary_dir, target_secondary_dir))
+    if _vec_length(source_tertiary_dir) <= 1e-8 or _vec_length(target_tertiary_dir) <= 1e-8:
+        return None
+
+    source_secondary_dir = _vec_normalize(_vec_cross(source_tertiary_dir, source_primary_dir))
+    target_secondary_dir = _vec_normalize(_vec_cross(target_tertiary_dir, target_primary_dir))
+    source_basis = _matrix_from_columns(source_primary_dir, source_secondary_dir, source_tertiary_dir)
+    target_basis = _matrix_from_columns(target_primary_dir, target_secondary_dir, target_tertiary_dir)
+    return _matrix_to_quaternion(_matmul3(target_basis, _transpose3(source_basis)))
+
+
+def _matrix_from_columns(
+    col0: tuple[float, float, float],
+    col1: tuple[float, float, float],
+    col2: tuple[float, float, float],
+) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
+    return (
+        (col0[0], col1[0], col2[0]),
+        (col0[1], col1[1], col2[1]),
+        (col0[2], col1[2], col2[2]),
+    )
+
+
+
+def _transpose3(
+    matrix: tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]],
+) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
+    return (
+        (matrix[0][0], matrix[1][0], matrix[2][0]),
+        (matrix[0][1], matrix[1][1], matrix[2][1]),
+        (matrix[0][2], matrix[1][2], matrix[2][2]),
+    )
+
+
+
+def _matmul3(
+    left: tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]],
+    right: tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]],
+) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
+    return (
+        (
+            left[0][0] * right[0][0] + left[0][1] * right[1][0] + left[0][2] * right[2][0],
+            left[0][0] * right[0][1] + left[0][1] * right[1][1] + left[0][2] * right[2][1],
+            left[0][0] * right[0][2] + left[0][1] * right[1][2] + left[0][2] * right[2][2],
+        ),
+        (
+            left[1][0] * right[0][0] + left[1][1] * right[1][0] + left[1][2] * right[2][0],
+            left[1][0] * right[0][1] + left[1][1] * right[1][1] + left[1][2] * right[2][1],
+            left[1][0] * right[0][2] + left[1][1] * right[1][2] + left[1][2] * right[2][2],
+        ),
+        (
+            left[2][0] * right[0][0] + left[2][1] * right[1][0] + left[2][2] * right[2][0],
+            left[2][0] * right[0][1] + left[2][1] * right[1][1] + left[2][2] * right[2][1],
+            left[2][0] * right[0][2] + left[2][1] * right[1][2] + left[2][2] * right[2][2],
+        ),
+    )
+
+
+
+def _matrix_to_quaternion(
+    matrix: tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]],
+) -> tuple[float, float, float, float]:
+    trace = matrix[0][0] + matrix[1][1] + matrix[2][2]
+    if trace > 0.0:
+        scale = math.sqrt(trace + 1.0) * 2.0
+        return normalize_quaternion_or_identity(
+            (
+                0.25 * scale,
+                (matrix[2][1] - matrix[1][2]) / scale,
+                (matrix[0][2] - matrix[2][0]) / scale,
+                (matrix[1][0] - matrix[0][1]) / scale,
+            )
+        )
+    if matrix[0][0] > matrix[1][1] and matrix[0][0] > matrix[2][2]:
+        scale = math.sqrt(1.0 + matrix[0][0] - matrix[1][1] - matrix[2][2]) * 2.0
+        return normalize_quaternion_or_identity(
+            (
+                (matrix[2][1] - matrix[1][2]) / scale,
+                0.25 * scale,
+                (matrix[0][1] + matrix[1][0]) / scale,
+                (matrix[0][2] + matrix[2][0]) / scale,
+            )
+        )
+    if matrix[1][1] > matrix[2][2]:
+        scale = math.sqrt(1.0 + matrix[1][1] - matrix[0][0] - matrix[2][2]) * 2.0
+        return normalize_quaternion_or_identity(
+            (
+                (matrix[0][2] - matrix[2][0]) / scale,
+                (matrix[0][1] + matrix[1][0]) / scale,
+                0.25 * scale,
+                (matrix[1][2] + matrix[2][1]) / scale,
+            )
+        )
+    scale = math.sqrt(1.0 + matrix[2][2] - matrix[0][0] - matrix[1][1]) * 2.0
+    return normalize_quaternion_or_identity(
+        (
+            (matrix[1][0] - matrix[0][1]) / scale,
+            (matrix[0][2] + matrix[2][0]) / scale,
+            (matrix[1][2] + matrix[2][1]) / scale,
+            0.25 * scale,
+        )
+    )
+
 
 
 def _quat_between_vectors(
@@ -698,6 +988,22 @@ def _vec_sub(
     rhs: tuple[float, float, float],
 ) -> tuple[float, float, float]:
     return (lhs[0] - rhs[0], lhs[1] - rhs[1], lhs[2] - rhs[2])
+
+
+
+def _project_onto_plane(
+    vector: tuple[float, float, float],
+    plane_normal: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    normal = _vec_normalize(plane_normal)
+    if _vec_length(normal) <= 1e-8:
+        return vector
+    scale = _vec_dot(vector, normal)
+    return (
+        vector[0] - normal[0] * scale,
+        vector[1] - normal[1] * scale,
+        vector[2] - normal[2] * scale,
+    )
 
 
 def _vec_dot(
@@ -740,7 +1046,7 @@ def _compute_example_skin_alignment(
     world_transforms: dict[str, Any],
     skin_template: Any,
     translation_map: Any | None,
-) -> _SimilarityTransform:
+) -> SimilarityTransform:
     from melos.blender.services.example_alignment import compute_example_skin_alignment
 
     return compute_example_skin_alignment(project, world_transforms, skin_template, translation_map)
@@ -750,13 +1056,13 @@ def _compute_skin_reference_alignment(
     world_transforms: dict[str, Any],
     skin_template: Any,
     translation_map: Any | None,
-) -> _SimilarityTransform:
+) -> SimilarityTransform:
     from melos.blender.services.example_alignment import compute_skin_reference_alignment
 
     return compute_skin_reference_alignment(world_transforms, skin_template, translation_map)
 
 
-def _align_generic_humanoid(vertices: list[list[float]], similarity: _SimilarityTransform) -> list[list[float]]:
+def _align_generic_humanoid(vertices: list[list[float]], similarity: SimilarityTransform) -> list[list[float]]:
     from melos.blender.services.example_alignment import align_generic_humanoid
 
     return align_generic_humanoid(vertices, similarity)

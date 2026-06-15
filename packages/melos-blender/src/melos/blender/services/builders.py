@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from melos.core.assets.model import AssetLibrary
-from melos.core.common.enums import CompileTarget
-from melos.core.common.metadata import ProvenanceRecord
 from melos.core.control.model import ControlInterface
 from melos.core.project.model import Project, ProjectMeta
 from melos.core.simulation.model import SimulationConfig
@@ -28,7 +26,6 @@ def build_project_meta(
     description: str = "",
     created_by: str | None = None,
     created_at: str | None = None,
-    provenance: list[ProvenanceRecord] | None = None,
 ) -> ProjectMeta:
     """Build project metadata from UI or scene values."""
 
@@ -38,7 +35,6 @@ def build_project_meta(
         description=description,
         created_by=created_by,
         created_at=created_at,
-        provenance=list(provenance or []),
     )
 
 
@@ -47,7 +43,7 @@ def build_simulation_config(
     time_step: float = 0.001,
     duration: float | None = None,
     gravity: tuple[float, float, float] = (0.0, 0.0, -9.81),
-    compile_target: CompileTarget = CompileTarget.MUJOCO,
+    compile_target: str = "mujoco",
 ) -> SimulationConfig:
     """Build thin backend-facing simulation preferences."""
 
@@ -72,7 +68,6 @@ def build_system_model(
     actuators: list[Actuator] | None = None,
     sensors: list[Sensor] | None = None,
     root_link_id: str | None = None,
-    profile: dict[str, object] | None = None,
 ) -> SystemModel:
     """Build a shared articulated system from already-instantiated entities."""
 
@@ -92,7 +87,6 @@ def build_system_model(
         geometries=list(geometries or []),
         actuators=list(actuators or []),
         sensors=list(sensors or []),
-        profile=dict(profile or {}),
     )
 
 

@@ -1,30 +1,19 @@
-"""Import result models for ``melos.sim.mujoco.importers``."""
+"""Import and compile report models for ``melos.sim.mujoco``.
+
+Both import and编译 passes emit ``(code, message, location)`` warnings.
+Rather than maintain two identical dataclass hierarchies, we keep one pair
+(``CompileWarning`` / ``CompileReport``) in ``reports.py`` and expose aliases
+here so that ``ImportReport`` / ``ImportWarning`` remain importable.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from melos.sim.mujoco.reports import CompileReport, CompileWarning
 
-@dataclass(slots=True, kw_only=True)
-class ImportWarning:
-    """Single non-fatal warning emitted during MJCF import."""
-
-    code: str
-    message: str
-    location: str
-
-
-@dataclass(slots=True, kw_only=True)
-class ImportReport:
-    """Aggregate report for an MJCF import pass."""
-
-    warnings: list[ImportWarning] = field(default_factory=list)
-
-    def add_warning(self, *, code: str, message: str, location: str) -> None:
-        """Append a warning to the report."""
-        self.warnings.append(
-            ImportWarning(code=code, message=message, location=location)
-        )
+ImportWarning = CompileWarning
+ImportReport = CompileReport
 
 
 @dataclass(slots=True, kw_only=True)

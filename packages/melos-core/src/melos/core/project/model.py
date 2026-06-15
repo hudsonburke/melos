@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 
 from melos.core.assets.model import AssetLibrary
-from melos.core.common.ids import ProjectId, SystemId
-from melos.core.common.metadata import AnnotationMap, ProvenanceRecord
+from melos.core.common.ids import Identifier
+from melos.core.common.metadata import AnnotationMap
 from melos.core.control.model import ControlInterface
 from melos.core.io.schema import CURRENT_SCHEMA_VERSION
 from melos.core.project.skin import SkinAttachment
@@ -19,12 +19,11 @@ from melos.core.system.model import SystemAssembly, SystemModel
 class ProjectMeta:
     """Descriptive metadata for a melos project."""
 
-    id: ProjectId = "project"
+    id: Identifier = "project"
     name: str = "untitled"
     description: str = ""
     created_by: str | None = None
     created_at: str | None = None
-    provenance: list[ProvenanceRecord] = field(default_factory=list)
     annotations: AnnotationMap = field(default_factory=dict)
 
 
@@ -47,7 +46,7 @@ class Project:
 
         return asdict(self)
 
-    def get_system(self, system_id: SystemId) -> SystemModel | None:
+    def get_system(self, system_id: Identifier) -> SystemModel | None:
         """Return the system with ``system_id`` if present."""
 
         return next((system for system in self.systems if system.id == system_id), None)

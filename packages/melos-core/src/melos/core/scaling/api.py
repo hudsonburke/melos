@@ -253,7 +253,6 @@ def scale_system(
         geometries=scaled_geometries,
         actuators=list(system.actuators),
         sensors=list(system.sensors),
-        profile=dict(system.profile),
         annotations=dict(system.annotations),
     )
 

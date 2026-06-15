@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Minimal MuJoCo compiler package for melos projects"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["melos-core>=0.1.0", "dm_control>=1.0"]
+dependencies = ["melos-core>=0.1.0"]
 keywords = ["biomechanics", "mujoco", "musculoskeletal", "simulation", "melos"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",

@@ -83,6 +83,19 @@ class MELOS_PT_device(PanelBase):
         box.prop(settings, "device_actuator_coordinate_id")
         box.operator("melos.create_device_actuator")
 
+        box = layout.box()
+        box.label(text="Create Cable Route Point")
+        box.prop(settings, "new_cable_route_name")
+        box.prop(settings, "new_cable_route_id")
+        box.prop(settings, "cable_actuator_id")
+        box.prop(settings, "cable_route_node_kind")
+        box.prop(settings, "cable_route_order")
+        box.prop(settings, "cable_route_site_id")
+        box.prop(settings, "cable_route_geometry_id")
+        box.prop(settings, "cable_route_side_site_id")
+        box.operator("melos.create_cable_route_point")
+        box.operator("melos.update_cable_visualization")
+
 
 CLASSES = (MELOS_PT_device,)
 

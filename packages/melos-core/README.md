@@ -49,6 +49,8 @@ The intended pattern is:
 4. optionally scale the project to subject-specific proportions in `melos.core`
 5. compile/export to MuJoCo and other downstream targets
 
+For implementation patterns and contribution checklists, see repository-root `docs/core-developer-guide.md`. For the compact public API summary, see `docs/core-api-reference.md`.
+
 ## Scope
 
 ### v0.1 (Current)

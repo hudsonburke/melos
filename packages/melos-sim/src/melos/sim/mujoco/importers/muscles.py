@@ -1,25 +1,28 @@
-"""MJCF site and muscle mapper for ``melos.sim.mujoco.importers``."""
+"""ElementTree MJCF site and muscle mapper fallback."""
 
 from __future__ import annotations
 
-from typing import Any
+from xml.etree.ElementTree import Element
 
 from melos.core.common.types import Transform
 from melos.core.system.enums import ActuatorKind
 from melos.core.system.model import Actuator, Site
 
-from .bodies import _commit_defaults_if_supported
+from .bodies import BodyTree
+from .defaults import DefaultClassMap, apply_defaults, get_active_class
 from .report import ImportReport
 
 
 def map_muscle_physiology(
-    actuator_section: Any,
+    actuator_section: Element,
+    defaults: DefaultClassMap,
     report: ImportReport,
 ) -> dict[str, dict[str, float]]:
     result: dict[str, dict[str, float]] = {}
-    for el in getattr(actuator_section, "muscle", []):
-        _commit_defaults_if_supported(el)
-        name = getattr(el, "name", None)
+    for el in actuator_section:
+        if el.tag != "muscle":
+            continue
+        name = el.get("name")
         if not name:
             report.add_warning(
                 code="muscle.missing_name",
@@ -27,32 +30,33 @@ def map_muscle_physiology(
                 location="actuator",
             )
             continue
-        result[str(name)] = _extract_physiology(el, str(name), report)
+        apply_defaults(el, get_active_class(el, None), defaults)
+        result[name] = _extract_physiology(el, name, report)
     return result
 
 
 def _extract_physiology(
-    el: Any,
+    el: Element,
     name: str,
     report: ImportReport,
 ) -> dict[str, float]:
     result: dict[str, float] = {}
 
-    force_value = getattr(el, "force", None)
-    if force_value is not None:
-        result["max_isometric_force"] = float(force_value)
+    force_str = el.get("force")
+    if force_str is not None:
+        result["max_isometric_force"] = float(force_str)
 
-    range_values = getattr(el, "range", None)
-    lengthrange_values = getattr(el, "lengthrange", None)
+    range_str = el.get("range")
+    lengthrange_str = el.get("lengthrange")
 
-    if lengthrange_values is not None and range_values is not None:
-        lr0, lr1 = (float(v) for v in lengthrange_values)
-        r0, r1 = (float(v) for v in range_values)
+    if lengthrange_str is not None and range_str is not None:
+        lr0, lr1 = (float(v) for v in lengthrange_str.split())
+        r0, r1 = (float(v) for v in range_str.split())
         range_span = r1 - r0
         if abs(range_span) > 1e-12:
             result["optimal_fiber_length"] = (lr1 - lr0) / range_span
             result["tendon_slack_length"] = lr0 - result["optimal_fiber_length"] * r0
-    elif lengthrange_values is None:
+    elif lengthrange_str is None:
         report.add_warning(
             code="muscle.missing_lengthrange",
             message=f"Muscle '{name}' has no lengthrange attribute; ofl and tsl cannot be computed",
@@ -60,7 +64,7 @@ def _extract_physiology(
         )
 
     for key in ("lmin", "lmax", "fpmax"):
-        value = getattr(el, key, None)
+        value = el.get(key)
         if value is not None:
             result[key] = float(value)
 
@@ -68,20 +72,19 @@ def _extract_physiology(
 
 
 def map_sites(
-    worldbody: Any,
+    worldbody: Element,
     report: ImportReport,
 ) -> list[Site]:
-    """Map MJCF ``<site>`` elements to shared ``Site`` objects."""
-
     sites: list[Site] = []
 
-    def _walk(body_parent: Any, parent_body_name: str | None) -> None:
-        for body in getattr(body_parent, "body", []):
-            body_name = getattr(body, "name", None)
-            _walk(body, str(body_name) if body_name is not None else None)
-        for child in getattr(body_parent, "site", []):
-            _commit_defaults_if_supported(child)
-            name = getattr(child, "name", None)
+    def _walk(el: Element, parent_body_name: str | None) -> None:
+        for child in el:
+            if child.tag == "body":
+                _walk(child, child.get("name"))
+                continue
+            if child.tag != "site":
+                continue
+            name = child.get("name")
             if not name:
                 report.add_warning(
                     code="site.missing_name",
@@ -89,22 +92,20 @@ def map_sites(
                     location=f"body:{parent_body_name or 'world'}",
                 )
                 continue
-            translation = (
-                tuple(float(v) for v in child.pos)
-                if getattr(child, "pos", None) is not None
-                else (0.0, 0.0, 0.0)
-            )
+            pos_str = child.get("pos", "0 0 0")
+            quat_str = child.get("quat")
+            x, y, z = (float(v) for v in pos_str.split())
             rotation = (
-                tuple(float(v) for v in child.quat)
-                if getattr(child, "quat", None) is not None
+                tuple(float(v) for v in quat_str.split())
+                if quat_str is not None
                 else (1.0, 0.0, 0.0, 0.0)
             )
             sites.append(
                 Site(
-                    id=str(name),
-                    name=str(name),
+                    id=name,
+                    name=name,
                     link_id=parent_body_name,
-                    transform=Transform(translation=translation, rotation=rotation),
+                    transform=Transform(translation=(x, y, z), rotation=rotation),
                     tags=["mjcf_site"],
                 )
             )
@@ -114,33 +115,37 @@ def map_sites(
 
 
 def map_muscle_paths(
-    tendon_section: Any | None,
+    tendon_section: Element | None,
+    worldbody: Element,
     wrap_geom_map: dict[str, str],
+    body_tree: BodyTree,
     report: ImportReport,
 ) -> list[Actuator]:
-    """Map MJCF ``<tendon><spatial>`` elements to muscle actuators."""
-    _ = report
+    _ = worldbody, body_tree, report
     if tendon_section is None:
         return []
 
     muscles: list[Actuator] = []
 
-    for spatial in getattr(tendon_section, "spatial", []):
-        name_raw = getattr(spatial, "name", "") or ""
-        muscle_id = name_raw.removesuffix("_tendon") if str(name_raw).endswith("_tendon") else str(name_raw)
+    for spatial in tendon_section:
+        if spatial.tag != "spatial":
+            continue
+
+        name_raw = spatial.get("name") or ""
+        muscle_id = name_raw.removesuffix("_tendon") if name_raw.endswith("_tendon") else name_raw
 
         site_ids: list[str] = []
         wrap_ids: list[str] = []
 
-        for child in spatial.all_children():
+        for child in spatial:
             if child.tag == "site":
-                ref = getattr(getattr(child, "site", None), "name", None)
+                ref = child.get("site", "")
                 if ref:
-                    site_ids.append(str(ref))
+                    site_ids.append(ref)
             elif child.tag == "geom":
-                geom_name = getattr(getattr(child, "geom", None), "name", None)
+                geom_name = child.get("geom", "")
                 if geom_name:
-                    wrap_ids.append(wrap_geom_map.get(str(geom_name), str(geom_name)))
+                    wrap_ids.append(wrap_geom_map.get(geom_name, geom_name))
 
         muscles.append(
             Actuator(

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 
 from melos.core.project.model import Project
+from melos.core.system.enums import ActuatorKind
 
 from .model import ValidationIssue, ValidationSeverity
 
@@ -64,6 +65,23 @@ def validate_topology(project: Project) -> list[ValidationIssue]:
                         code="topology.self_parent",
                         message="Joint parent_link_id must differ from child_link_id.",
                         location=f"{prefix}.joints[{joint.id}]",
+                    )
+                )
+
+        for actuator in system.actuators:
+            if actuator.kind != ActuatorKind.CABLE:
+                continue
+            waypoint_count = len(actuator.route) if actuator.route else len(actuator.site_ids)
+            if waypoint_count < 2:
+                issues.append(
+                    ValidationIssue(
+                        code="topology.cable_route_too_short",
+                        message=(
+                            f"Cable actuator {actuator.id!r} needs at least two routing "
+                            f"waypoints; found {waypoint_count}."
+                        ),
+                        location=f"{prefix}.actuators[{actuator.id}].route",
+                        severity=ValidationSeverity.WARNING,
                     )
                 )
 

@@ -8,8 +8,10 @@ class SegmentTranslationRule:
     segment_id: str
     source_link_id: str
     target_link_id: str
+    source_tail_link_id: str | None = None
     parent_segment_id: str | None = None
     target_joint_ids: list[str] = field(default_factory=list)
+    reference_target_joint_ids: list[str] = field(default_factory=list)
     anchor_target_joint_id: str | None = None
     reduction_mode: str = "direct"
     failure_policy: str = "required"

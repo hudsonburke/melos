@@ -194,7 +194,6 @@ def build_example_target_joint_set(
         positions=build_example_target_joint_positions(world_transforms),
         space="world",
         units="m",
-        annotations={"source": "melos.sim.mujoco.adapters.example_source"},
     )
 
 
@@ -231,7 +230,6 @@ def measure_example_source_segments(
     return SegmentMeasurementSet(
         items=items,
         units="m",
-        annotations={"source": "melos.sim.mujoco.adapters.example_source"},
     )
 
 

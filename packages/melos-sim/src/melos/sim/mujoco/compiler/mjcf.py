@@ -7,14 +7,14 @@ from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, indent, tostring
 
 from melos.core.assets.model import AssetRecord
-from melos.core.common.enums import AssetRole, CompileTarget
+from melos.core.common.enums import AssetRole
 from melos.core.common.mechanics import InertialProperties
 from melos.core.common.types import Bounds, Transform, Vec3
 from melos.core.control.model import CommandChannel, ObservationChannel
 from melos.core.io.json import load_project
 from melos.core.kinematics.enums import JointKind
 from melos.core.project.model import Project
-from melos.core.system.enums import ActuatorKind, GeometryRole, SensorKind, SystemRole
+from melos.core.system.enums import ActuatorKind, GeometryRole, RouteNodeKind, SensorKind, SystemRole
 from melos.core.system.model import Actuator, Geometry, Joint, Link, Sensor, Site, SystemModel
 from melos.core.validation import validate_project
 
@@ -35,6 +35,8 @@ class _CompilerState:
     joint_names: dict[tuple[str, str], str] = field(default_factory=dict)
     link_joint_names: dict[tuple[str, str], str] = field(default_factory=dict)
     sensor_names: dict[tuple[str, str], str] = field(default_factory=dict)
+    wrap_geom_names: dict[tuple[str, str], str] = field(default_factory=dict)
+    tendon_names: dict[tuple[str, str], str] = field(default_factory=dict)
 
 
 def compile_project(
@@ -44,7 +46,7 @@ def compile_project(
 ) -> MujocoCompileResult:
     """Compile a melos project into minimal MuJoCo-facing artifacts."""
 
-    if project.simulation.compile_target != CompileTarget.MUJOCO:
+    if project.simulation.compile_target != "mujoco":
         raise ValueError(
             "melos.sim.mujoco can only compile projects whose compile_target is 'mujoco'."
         )
@@ -95,8 +97,9 @@ def compile_project(
     for system in project.systems:
         _append_system(worldbody, project, system, asset_lookup, state)
 
-    _append_muscles(tendon, project, state)
+    _append_routed_tendons(tendon, project, state)
     _append_system_actuators(actuator, project, state)
+    _append_tendon_actuators(actuator, project, state)
     _append_system_sensors(sensor, project, state)
     signal_map = _build_signal_map(sensor, project, state)
 
@@ -315,6 +318,7 @@ def _append_geometries(
                     "rgba": "0.8 0.6 0.2 0.35",
                 },
             )
+            state.wrap_geom_names[(system.id, geometry.id)] = f"{system.id}_wrap_{geometry.id}"
             continue
 
         if geometry.role == GeometryRole.CONTACT:
@@ -477,27 +481,143 @@ def _append_inertial(body_element: Element, inertial: InertialProperties | None)
     )
 
 
-def _append_muscles(tendon: Element, project: Project, state: _CompilerState) -> None:
+def _append_routed_tendons(tendon: Element, project: Project, state: _CompilerState) -> None:
+    """Lower MUSCLE and CABLE actuators to spatial tendons routed through sites/wraps."""
+
     for system in project.systems:
-        if system.role != SystemRole.ANATOMICAL:
-            continue
         for actuator in system.actuators:
-            if actuator.kind != ActuatorKind.MUSCLE:
+            if actuator.kind not in (ActuatorKind.MUSCLE, ActuatorKind.CABLE):
                 continue
-            site_sequence = build_muscle_site_sequence(actuator, state.site_names, system.id, state.report)
-            if len(site_sequence) < 2:
+            path_elements, site_count = _resolve_tendon_path(actuator, system.id, state)
+            if site_count < 2:
+                code = (
+                    "muscle.path.unresolved"
+                    if actuator.kind == ActuatorKind.MUSCLE
+                    else "cable.path.unresolved"
+                )
                 state.report.add_warning(
-                    code="muscle.path.unresolved",
+                    code=code,
                     message=(
-                        f"Muscle {actuator.id!r} did not resolve to at least two MuJoCo "
+                        f"Actuator {actuator.id!r} did not resolve to at least two MuJoCo "
                         "sites; skipping tendon export."
                     ),
                     location=f"systems[{system.id}].actuators[{actuator.id}]",
                 )
                 continue
-            spatial = SubElement(tendon, "spatial", {"name": f"muscle_{actuator.id}"})
-            for site_name in site_sequence:
-                SubElement(spatial, "site", {"site": site_name})
+            prefix = "muscle" if actuator.kind == ActuatorKind.MUSCLE else "cable"
+            spatial_attrs = {"name": f"{prefix}_{actuator.id}"}
+            _apply_cable_spatial_attrs(spatial_attrs, actuator.cable)
+            spatial = SubElement(tendon, "spatial", spatial_attrs)
+            for tag, attributes in path_elements:
+                SubElement(spatial, tag, attributes)
+            state.tendon_names[(system.id, actuator.id)] = spatial_attrs["name"]
+
+
+def _resolve_tendon_path(
+    actuator: Actuator,
+    system_id: str,
+    state: _CompilerState,
+) -> tuple[list[tuple[str, dict[str, str]]], int]:
+    """Resolve an ordered tendon path, preferring ``route`` over legacy ``site_ids``."""
+
+    elements: list[tuple[str, dict[str, str]]] = []
+    site_count = 0
+    if actuator.route:
+        for index, node in enumerate(actuator.route):
+            location = f"systems[{system_id}].actuators[{actuator.id}].route[{index}]"
+            if node.kind == RouteNodeKind.WRAP and node.geometry_id is not None:
+                geom_name = state.wrap_geom_names.get((system_id, node.geometry_id))
+                if geom_name is None:
+                    state.report.add_warning(
+                        code="tendon.wrap_unresolved",
+                        message=(
+                            f"Route wrap geometry {node.geometry_id!r} on actuator "
+                            f"{actuator.id!r} is not a compiled wrap geom; skipping waypoint."
+                        ),
+                        location=location,
+                    )
+                    continue
+                wrap_attrs = {"geom": geom_name}
+                if node.side_site_id is not None:
+                    side_name = state.site_names.get((system_id, node.side_site_id))
+                    if side_name is not None:
+                        wrap_attrs["sidesite"] = side_name
+                elements.append(("geom", wrap_attrs))
+                continue
+            if node.site_id is None:
+                continue
+            site_name = state.site_names.get((system_id, node.site_id))
+            if site_name is None:
+                state.report.add_warning(
+                    code="tendon.site_unresolved",
+                    message=(
+                        f"Route site {node.site_id!r} on actuator {actuator.id!r} did not "
+                        "resolve to a MuJoCo site; skipping waypoint."
+                    ),
+                    location=location,
+                )
+                continue
+            elements.append(("site", {"site": site_name}))
+            site_count += 1
+        return elements, site_count
+
+    for site_name in build_muscle_site_sequence(actuator, state.site_names, system_id, state.report):
+        elements.append(("site", {"site": site_name}))
+        site_count += 1
+    return elements, site_count
+
+
+def _apply_cable_spatial_attrs(attributes: dict[str, str], cable: object | None) -> None:
+    if cable is None:
+        return
+    width = getattr(cable, "width", None)
+    if width is not None:
+        attributes["width"] = _format_scalar(float(width))
+    stiffness = getattr(cable, "stiffness", 0.0)
+    if stiffness:
+        attributes["stiffness"] = _format_scalar(float(stiffness))
+    damping = getattr(cable, "damping", 0.0)
+    if damping:
+        attributes["damping"] = _format_scalar(float(damping))
+    rest_length = getattr(cable, "rest_length", None)
+    if rest_length is not None:
+        attributes["springlength"] = _format_scalar(float(rest_length))
+    length_range = getattr(cable, "length_range", None)
+    if length_range is not None and length_range.lower is not None and length_range.upper is not None:
+        attributes["range"] = _format_scalars(float(length_range.lower), float(length_range.upper))
+        attributes["limited"] = "true"
+
+
+def _append_tendon_actuators(actuator_element: Element, project: Project, state: _CompilerState) -> None:
+    """Emit driving actuators for tendon-backed muscles and cables."""
+
+    for system in project.systems:
+        for actuator in system.actuators:
+            tendon_name = state.tendon_names.get((system.id, actuator.id))
+            if tendon_name is None:
+                continue
+            if actuator.kind == ActuatorKind.MUSCLE:
+                backend_name = f"{system.id}_muscle_{actuator.id}"
+                attributes = {"name": backend_name, "tendon": tendon_name}
+                _apply_muscle_actuator_params(attributes, actuator)
+                SubElement(actuator_element, "muscle", attributes)
+            else:
+                backend_name = f"{system.id}_actuator_{actuator.id}"
+                attributes = {"name": backend_name, "tendon": tendon_name}
+                _apply_actuator_bounds(attributes, actuator.command_limits, control=True)
+                _apply_actuator_bounds(attributes, actuator.output_limits, control=False)
+                SubElement(actuator_element, "motor", attributes)
+            state.actuator_names[(system.id, actuator.id)] = backend_name
+            state.actuator_names[(None, actuator.id)] = backend_name
+
+
+def _apply_muscle_actuator_params(attributes: dict[str, str], actuator: Actuator) -> None:
+    physiology = actuator.parameters.get("physiology")
+    if not isinstance(physiology, dict):
+        return
+    force = physiology.get("max_isometric_force")
+    if isinstance(force, (int, float)):
+        attributes["force"] = _format_scalar(float(force))
 
 
 def _append_system_actuators(actuator_element: Element, project: Project, state: _CompilerState) -> None:
@@ -505,7 +625,7 @@ def _append_system_actuators(actuator_element: Element, project: Project, state:
         if system.role == SystemRole.ANATOMICAL:
             continue
         for actuator in system.actuators:
-            if actuator.kind == ActuatorKind.MUSCLE:
+            if actuator.kind in (ActuatorKind.MUSCLE, ActuatorKind.CABLE):
                 continue
             _append_system_actuator(actuator_element, system.id, actuator, state)
 

@@ -27,6 +27,7 @@ melos.blender → melos.core ← melos.sim.mujoco
 - **melos.skin**: Depends on `melos.core` and `melos.sim`. Acts as the mediating layer between GEM/SOMA-X and the core model. It owns the heavy ML surface area (numpy, torch, trimesh), keeping `melos.core` pure Python.
 - **melos.blender**: Depends on `bpy` (Blender Python API) and `melos.core`. It handles the mapping between Blender objects and core models.
 - **melos.sim**: Simulation umbrella package. The current backend is `melos.sim.mujoco`, which depends on `melos.core`, uses the standard library `xml.etree` to generate MJCF (MuJoCo XML) files, and does not require the `mujoco` python package to perform compilation.
+- **MJCF Import**: `melos.sim.mujoco.importers` uses Python's standard library `xml.etree.ElementTree` with built-in include resolution and default-class handling to parse MJCF files. No external dependencies are required.
 
 ## 3. The Project Aggregate
 
@@ -36,7 +37,7 @@ melos.blender → melos.core ← melos.sim.mujoco
 @dataclass(slots=True, kw_only=True)
 class Project:
     schema_version: str = "0.1.0"
-    meta: ProjectMeta                 # id, name, description, created_by, created_at, provenance
+    meta: ProjectMeta                 # id, name, description, created_by, created_at
     assets: AssetLibrary              # items: list[AssetRecord] — id, name, role, uri, media_type
     systems: list[SystemModel]        # canonical articulated systems
     assemblies: list[SystemAssembly]  # interface-centric connections/couplings
@@ -112,7 +113,7 @@ The framework provides a robust serialization layer that handles the translation
 - **Serialization**: `project_to_dict(project)` recursively converts dataclasses to dictionaries, transforming enums into their string values. `project_to_json(project)` returns a JSON string.
 - **Deserialization**: `project_from_dict(data)` uses type-hint-driven reconstruction. The internal `_structure_dataclass` function handles the instantiation of nested models.
 - **File Access**: `save_project` and `load_project` provide high-level wrappers for file I/O.
-- **Versioning**: The system tracks `CURRENT_SCHEMA_VERSION` (0.1.0). Future changes are handled via forward migrations defined in `migrations.py`.
+- **Versioning**: The system tracks `CURRENT_SCHEMA_VERSION` (0.1.0). Deserialization rejects unknown versions with an explicit error.
 
 ## 10. Blender Integration Architecture
 
@@ -157,7 +158,6 @@ The compiler transforms a `Project` into a valid MJCF XML file and a signal mapp
 | **WrapGeometryKind** | `cylinder`, `sphere`, `ellipsoid`, `torus`, `mesh`, `custom` |
 | **MusclePathPointKind** | `origin`, `via`, `insertion` |
 | **AssetRole** | `imaging`, `segmentation`, `visual`, `collision`, `simulation`, `fitting`, `analysis` |
-| **CompileTarget** | `mujoco` |
 | **SolverType** | `pgs`, `cg`, `newton` |
 | **IntegratorType** | `euler`, `implicit`, `implicitfast`, `rk4` |
 | **ValidationSeverity** | `error`, `warning` |

@@ -18,6 +18,8 @@ from melos.blender.addon.operators.project import (
 )
 from melos.blender.services.example_workflow import (
     _compute_example_body_mesh_display_scale,
+    _compute_example_body_mesh_display_scale_factors,
+    _compute_example_body_mesh_source_tail_points,
     _compute_example_display_upright_rotation,
 )
 from melos.sim.mujoco.adapters import build_example_human_mesh_rigging_plan
@@ -358,7 +360,128 @@ def test_compute_example_body_mesh_display_scale_uses_display_to_source_segment_
 
 
 
-def test_create_body_mesh_objects_align_reference_meshes_to_skin_display_pose(
+def test_compute_example_body_mesh_source_tail_points_uses_translation_rule_tail_links() -> None:
+    translation_map = build_myofullbody_translation_map()
+    source_tail_points = _compute_example_body_mesh_source_tail_points(
+        {
+            "ulna_l": Transform(translation=(1.0, 0.0, 0.0)),
+            "lunate_l": Transform(translation=(2.0, 3.0, 4.0)),
+            "ulna_r": Transform(translation=(5.0, 0.0, 0.0)),
+            "lunate_r": Transform(translation=(6.0, 7.0, 8.0)),
+        },
+        translation_map,
+    )
+
+    assert source_tail_points["ulna_l"] == (2.0, 3.0, 4.0)
+    assert source_tail_points["ulna_r"] == (6.0, 7.0, 8.0)
+
+
+
+def test_compute_example_body_mesh_display_scale_factors_keeps_per_link_overrides() -> None:
+    translation_map = build_myofullbody_translation_map()
+    scale_factors = _compute_example_body_mesh_display_scale_factors(
+        {
+            "humerus_l": Transform(translation=(0.0, 0.0, 0.0)),
+            "ulna_l": Transform(translation=(2.0, 0.0, 0.0)),
+            "femur_l": Transform(translation=(0.0, 0.0, 0.0)),
+            "tibia_l": Transform(translation=(2.0, 0.0, 0.0)),
+        },
+        translation_map,
+        {
+            "humerus_l": (10.0, 0.0, 0.0),
+            "femur_l": (20.0, 0.0, 0.0),
+        },
+        {
+            "humerus_l": (14.0, 0.0, 0.0),
+            "femur_l": (21.0, 0.0, 0.0),
+        },
+    )
+
+    assert scale_factors["humerus_l"] == pytest.approx(2.0)
+    assert scale_factors["femur_l"] == pytest.approx(0.5)
+
+
+
+def test_create_body_mesh_objects_propagates_display_transform_to_child_links(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    dummy_asset = tmp_path / "body_child.stl"
+    dummy_asset.write_bytes(b"stub")
+
+    system = SystemModel(
+        id="anatomical",
+        name="Anatomical System",
+        role=SystemRole.ANATOMICAL,
+        root_link_id="root",
+        links=[
+            Link(id="root", name="Root"),
+            Link(
+                id="child",
+                name="Child",
+                transform=Transform(translation=(2.0, 0.0, 0.0)),
+                asset_ids=["child_asset"],
+            ),
+        ],
+        joints=[
+            Joint(
+                id="root_child",
+                name="root_child",
+                kind=JointKind.FIXED,
+                parent_link_id="root",
+                child_link_id="child",
+            )
+        ],
+    )
+    world_transforms = compute_system_link_world_transforms(system)
+    project = SimpleNamespace(
+        assets=SimpleNamespace(
+            items=[
+                AssetRecord(
+                    id="child_asset",
+                    name="Child Asset",
+                    role=AssetRole.VISUAL,
+                    uri=str(dummy_asset),
+                    media_type="model/stl",
+                )
+            ]
+        ),
+        get_anatomical_system=lambda: system,
+    )
+
+    monkeypatch.setattr(
+        project_ops,
+        "_load_binary_stl_mesh",
+        lambda _path: (
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+            [[0, 1, 2]],
+        ),
+    )
+
+    scene = FakeScene()
+    ctx = FakeContext(scene)
+    body_meshes = project_ops._create_body_mesh_objects(
+        project,
+        ctx,
+        arm_obj=None,
+        world_transforms=world_transforms,
+        body_objects={},
+        create_mesh_object=_make_mesh_factory(scene),
+        attach_to_armature=False,
+        reference_body_anchors={"root": (10.0, 0.0, 0.0)},
+        reference_body_tail_points={"root": (10.0, 1.0, 0.0)},
+        display_scale_factor=0.5,
+    )
+
+    assert len(body_meshes) == 1
+    vertices = body_meshes[0]["mesh_data"].vertices
+    assert vertices[0] == pytest.approx([10.0, 1.0, 0.0])
+    assert vertices[1] == pytest.approx([10.0, 1.5, 0.0])
+    assert vertices[2] == pytest.approx([10.0, 1.0, 0.5])
+
+
+
+def test_create_body_mesh_objects_uses_per_body_display_scale_override(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -426,14 +549,15 @@ def test_create_body_mesh_objects_align_reference_meshes_to_skin_display_pose(
         reference_body_anchors={"root": (10.0, 0.0, 0.0)},
         reference_body_tail_points={"root": (10.0, 1.0, 0.0)},
         display_scale_factor=0.5,
+        body_display_scale_factors={"root": 0.75},
     )
 
     assert len(body_meshes) == 1
     vertices = body_meshes[0]["mesh_data"].vertices
     assert len(vertices) == 3
     assert vertices[0] == pytest.approx([10.0, 0.0, 0.0])
-    assert vertices[1] == pytest.approx([10.0, 0.5, 0.0])
-    assert vertices[2] == pytest.approx([10.0, 0.0, 0.5])
+    assert vertices[1] == pytest.approx([10.0, 0.75, 0.0])
+    assert vertices[2] == pytest.approx([10.0, 0.0, 0.75])
 
 
 
@@ -445,6 +569,10 @@ def test_create_example_model_project_creates_armature_but_no_mesh() -> None:
     body_meshes = [o for o in scene.collection.linked if o.name.startswith("body_")]
     assert body_meshes
     assert any(not getattr(obj, "hide_viewport", False) for obj in body_meshes)
+    body_mesh_names = {obj.name for obj in body_meshes}
+    assert "body_humerus_l_humerus_l" in body_mesh_names
+    assert "body_ulna_l_ulna_l" in body_mesh_names
+    assert "body_radius_l_radius_l" in body_mesh_names
 
 
 

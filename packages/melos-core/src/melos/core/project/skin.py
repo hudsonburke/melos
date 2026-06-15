@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from melos.core.common.ids import AssetId, CoordinateId, GeometryId, LinkId, SiteId, SystemId
+from melos.core.common.ids import Identifier
 from melos.core.common.metadata import AnnotationMap
 from melos.core.common.types import Transform
 
@@ -15,12 +15,12 @@ DEFAULT_SKIN_BINDING_MODE = "link_linear_blend"
 class SkinAttachmentFit:
     """Fitting metadata that describes how a skin mesh was registered to a target system."""
 
-    anchor_link_id: LinkId
+    anchor_link_id: Identifier
     rest_transform_in_anchor: Transform
-    fit_coordinate_values: dict[CoordinateId, float]
-    reference_link_ids: list[LinkId] = field(default_factory=list)
-    reference_site_ids: list[SiteId] = field(default_factory=list)
-    reference_geometry_ids: list[GeometryId] = field(default_factory=list)
+    fit_coordinate_values: dict[Identifier, float]
+    reference_link_ids: list[Identifier] = field(default_factory=list)
+    reference_site_ids: list[Identifier] = field(default_factory=list)
+    reference_geometry_ids: list[Identifier] = field(default_factory=list)
     fit_method: str = "skin_system_fit_v1"
     annotations: AnnotationMap = field(default_factory=dict)
 
@@ -31,9 +31,9 @@ class SkinAttachment:
 
     id: str
     name: str
-    target_system_id: SystemId
-    mesh_asset_id: AssetId
-    binding_asset_id: AssetId
+    target_system_id: Identifier
+    mesh_asset_id: Identifier
+    binding_asset_id: Identifier
     fit: SkinAttachmentFit
     translation_map_id: str | None = None
     binding_mode: str = DEFAULT_SKIN_BINDING_MODE

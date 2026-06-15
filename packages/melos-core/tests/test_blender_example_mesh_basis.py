@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from melos.core.retarget.alignment import SimilarityTransform
+
 from melos.blender.addon.operators.project import _align_generic_humanoid
 
 
@@ -11,15 +13,15 @@ def test_align_generic_humanoid_converts_obj_y_up_into_template_z_up() -> None:
         [1.0, 2.0, 0.2],
         [0.0, 0.0, 0.0],
     ]
-    identity = {
-        "rotation": (
+    identity = SimilarityTransform(
+        rotation=(
             (1.0, 0.0, 0.0),
             (0.0, 1.0, 0.0),
             (0.0, 0.0, 1.0),
         ),
-        "scale": 1.0,
-        "translation": (0.0, 0.0, 0.0),
-    }
+        scale=1.0,
+        translation=(0.0, 0.0, 0.0),
+    )
 
     aligned = _align_generic_humanoid(vertices, identity)
 

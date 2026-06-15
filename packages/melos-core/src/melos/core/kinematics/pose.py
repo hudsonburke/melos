@@ -8,10 +8,13 @@ No numpy, no bpy, no MuJoCo imports.
 
 from __future__ import annotations
 
-from math import cos, sin
 from typing import TYPE_CHECKING
 
-from melos.core.common.transforms import compose_transforms
+from melos.core.common.transforms import (
+    axis_angle_to_quat,
+    compose_transforms,
+    multiply_quaternions,
+)
 from melos.core.common.types import Quat, Transform, Vec3
 from melos.core.kinematics.enums import CoordinateKind, JointKind
 
@@ -93,7 +96,7 @@ def _joint_delta(
             if coord.kind != CoordinateKind.ROTATION:
                 continue
             value = coordinate_values.get(coord.id, coord.default_value)
-            total_rotation = _quat_multiply(total_rotation, _axis_angle_to_quat(coord.axis, value))
+            total_rotation = multiply_quaternions(total_rotation, axis_angle_to_quat(coord.axis, value))
         return Transform(translation=(0.0, 0.0, 0.0), rotation=total_rotation)
 
     if kind == JointKind.PRISMATIC:
@@ -111,31 +114,27 @@ def _joint_delta(
             tz += az * value
         return Transform(translation=(tx, ty, tz), rotation=(1.0, 0.0, 0.0, 0.0))
 
+    if kind == JointKind.CUSTOM:
+        delta = Transform.identity()
+        for coord in coordinates:
+            value = coordinate_values.get(coord.id, coord.default_value)
+            ax, ay, az = coord.axis
+            norm = (ax * ax + ay * ay + az * az) ** 0.5
+            if norm > 0.0:
+                ax, ay, az = ax / norm, ay / norm, az / norm
+            if coord.kind == CoordinateKind.ROTATION:
+                delta = compose_transforms(
+                    delta,
+                    Transform(translation=(0.0, 0.0, 0.0), rotation=axis_angle_to_quat((ax, ay, az), value)),
+                )
+            elif coord.kind == CoordinateKind.TRANSLATION:
+                delta = compose_transforms(
+                    delta,
+                    Transform(translation=(ax * value, ay * value, az * value), rotation=(1.0, 0.0, 0.0, 0.0)),
+                )
+        return delta
+
     raise NotImplementedError(
         f"evaluate_system_world_transforms: joint kind '{kind}' is not supported in v1. "
         "Only FIXED, REVOLUTE, and PRISMATIC joints are handled."
-    )
-
-
-def _axis_angle_to_quat(axis: Vec3, angle: float) -> Quat:
-    """Convert an axis + angle (radians) to a ``(w, x, y, z)`` quaternion."""
-    ax, ay, az = axis
-    norm = (ax * ax + ay * ay + az * az) ** 0.5
-    if norm == 0.0:
-        return (1.0, 0.0, 0.0, 0.0)
-    ax, ay, az = ax / norm, ay / norm, az / norm
-    half = angle * 0.5
-    s = sin(half)
-    return (cos(half), ax * s, ay * s, az * s)
-
-
-def _quat_multiply(lhs: Quat, rhs: Quat) -> Quat:
-    """Hamilton product of two ``(w, x, y, z)`` quaternions."""
-    lw, lx, ly, lz = lhs
-    rw, rx, ry, rz = rhs
-    return (
-        lw * rw - lx * rx - ly * ry - lz * rz,
-        lw * rx + lx * rw + ly * rz - lz * ry,
-        lw * ry - lx * rz + ly * rw + lz * rx,
-        lw * rz + lx * ry - ly * rx + lz * rw,
     )

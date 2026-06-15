@@ -3,7 +3,19 @@ from __future__ import annotations
 import math
 from typing import Mapping, Sequence
 
-from melos.core.common.transforms import normalize_quaternion_or_identity, rotate_vector
+from melos.core.common.transforms import (
+    axis_angle_to_quat as _axis_angle_to_quat,
+    multiply_quaternions,
+    normalize_quaternion_or_identity,
+    rotate_vector,
+    vec3_add,
+    vec3_cross,
+    vec3_dot,
+    vec3_length,
+    vec3_normalize,
+    vec3_scale,
+    vec3_sub,
+)
 from melos.core.common.types import Quat, Transform, Vec3
 from melos.core.retarget.model import RetargetBindingSpec
 
@@ -109,8 +121,8 @@ def build_link_linear_blend_skinning_transforms(
             continue
         bind_tail = bind_tails.get(link_id, bind_anchor)
         current_tail = current_tails.get(link_id, current_anchor)
-        rotation = quaternion_from_to(_sub(bind_tail, bind_anchor), _sub(current_tail, current_anchor))
-        translation = _sub(current_anchor, rotate_vector(rotation, bind_anchor))
+        rotation = quaternion_from_to(vec3_sub(bind_tail, bind_anchor), vec3_sub(current_tail, current_anchor))
+        translation = vec3_sub(current_anchor, rotate_vector(rotation, bind_anchor))
         transforms[link_id] = Transform(translation=translation, rotation=rotation)
     return transforms
 
@@ -134,7 +146,7 @@ def pose_vertices_with_link_linear_blend(
             if weight <= 0.0 or link_index < 0 or link_index >= len(link_ids):
                 continue
             transform = skinning_transforms.get(link_ids[link_index], Transform.identity())
-            transformed = _add(rotate_vector(transform.rotation, bind_vertex), transform.translation)
+            transformed = vec3_add(rotate_vector(transform.rotation, bind_vertex), transform.translation)
             accum = (
                 accum[0] + transformed[0] * float(weight),
                 accum[1] + transformed[1] * float(weight),
@@ -149,28 +161,21 @@ def pose_vertices_with_link_linear_blend(
 
 
 def quaternion_from_to(source: Vec3, target: Vec3) -> Quat:
-    source_n = _normalize(source)
-    target_n = _normalize(target)
-    if _length(source_n) < 1e-8 or _length(target_n) < 1e-8:
+    source_n = vec3_normalize(source)
+    target_n = vec3_normalize(target)
+    if vec3_length(source_n) < 1e-8 or vec3_length(target_n) < 1e-8:
         return Transform.identity().rotation
-    axis = _cross(source_n, target_n)
-    axis_length = _length(axis)
-    dot = max(-1.0, min(1.0, _dot(source_n, target_n)))
+    axis = vec3_cross(source_n, target_n)
+    axis_length = vec3_length(axis)
+    d = max(-1.0, min(1.0, vec3_dot(source_n, target_n)))
     if axis_length < 1e-8:
-        if dot > 0.0:
+        if d > 0.0:
             return Transform.identity().rotation
         fallback_axis = _orthogonal_axis(source_n)
-        return quaternion_from_axis_angle(fallback_axis, math.pi)
-    axis = _scale(axis, 1.0 / axis_length)
-    angle = math.acos(dot)
-    return quaternion_from_axis_angle(axis, angle)
-
-
-def quaternion_from_axis_angle(axis: Vec3, angle: float) -> Quat:
-    axis_n = _normalize(axis)
-    half = angle * 0.5
-    s = math.sin(half)
-    return normalize_quaternion_or_identity((math.cos(half), axis_n[0] * s, axis_n[1] * s, axis_n[2] * s))
+        return _axis_angle_to_quat(fallback_axis, math.pi)
+    axis = vec3_scale(axis, 1.0 / axis_length)
+    angle = math.acos(d)
+    return _axis_angle_to_quat(axis, angle)
 
 
 def _orthogonal_axis(vector: Vec3) -> Vec3:
@@ -178,39 +183,4 @@ def _orthogonal_axis(vector: Vec3) -> Vec3:
         candidate = (1.0, 0.0, 0.0)
     else:
         candidate = (0.0, 1.0, 0.0)
-    return _normalize(_cross(vector, candidate))
-
-
-def _dot(a: Vec3, b: Vec3) -> float:
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-
-
-def _add(a: Vec3, b: Vec3) -> Vec3:
-    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
-
-
-def _sub(a: Vec3, b: Vec3) -> Vec3:
-    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
-
-
-def _cross(a: Vec3, b: Vec3) -> Vec3:
-    return (
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    )
-
-
-def _length(v: Vec3) -> float:
-    return math.sqrt(_dot(v, v))
-
-
-def _normalize(v: Vec3) -> Vec3:
-    magnitude = _length(v)
-    if magnitude < 1e-8:
-        return (0.0, 0.0, 0.0)
-    return (v[0] / magnitude, v[1] / magnitude, v[2] / magnitude)
-
-
-def _scale(v: Vec3, scalar: float) -> Vec3:
-    return (v[0] * scalar, v[1] * scalar, v[2] * scalar)
+    return vec3_normalize(vec3_cross(vector, candidate))

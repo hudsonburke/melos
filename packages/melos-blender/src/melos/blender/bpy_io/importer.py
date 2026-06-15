@@ -15,6 +15,13 @@ from melos.blender.constants import (
     DEVICE_ACTUATOR_KIND,
     DEVICE_ACTUATOR_KIND_KEY,
     DEVICE_ACTUATOR_JOINT_ID_KEY,
+    CABLE_ACTUATOR_ID_KEY,
+    CABLE_ROUTE_GEOMETRY_ID_KEY,
+    CABLE_ROUTE_NODE_KIND_KEY,
+    CABLE_ROUTE_ORDER_KEY,
+    CABLE_ROUTE_SIDE_SITE_ID_KEY,
+    CABLE_ROUTE_SITE_ID_KEY,
+    DEVICE_CABLE_ROUTE_POINT_KIND,
     DEVICE_FRAME_KIND,
     DEVICE_FRAME_LINK_ID_KEY,
     DEVICE_INTERFACE_ASSET_ID_KEY,
@@ -220,6 +227,17 @@ def import_project_to_scene(
                 obj[DEVICE_ACTUATOR_KIND_KEY] = actuator.kind.value
                 obj[DEVICE_ACTUATOR_JOINT_ID_KEY] = actuator.joint_id or ""
                 obj[DEVICE_ACTUATOR_COORDINATE_ID_KEY] = actuator.coordinate_id or ""
+                for order, node in enumerate(actuator.route):
+                    point = _make(f"{actuator.name} Route {order}")
+                    point[ENTITY_KIND_KEY] = DEVICE_CABLE_ROUTE_POINT_KIND
+                    point[ENTITY_ID_KEY] = f"{actuator.id}_route_{order}"
+                    point[DISPLAY_NAME_KEY] = f"{actuator.name} Route {order}"
+                    point[CABLE_ACTUATOR_ID_KEY] = actuator.id
+                    point[CABLE_ROUTE_ORDER_KEY] = float(order)
+                    point[CABLE_ROUTE_NODE_KIND_KEY] = node.kind.value
+                    point[CABLE_ROUTE_SITE_ID_KEY] = node.site_id or ""
+                    point[CABLE_ROUTE_GEOMETRY_ID_KEY] = node.geometry_id or ""
+                    point[CABLE_ROUTE_SIDE_SITE_ID_KEY] = node.side_site_id or ""
             for site in system.sites:
                 if "interface" not in site.tags:
                     continue

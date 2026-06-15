@@ -88,11 +88,26 @@ pip install -e ./packages/melos-sim
 
 ### Running Tests
 
-Execute the test suite from the repository root:
+The test `conftest.py` files put each sibling package's `src/` on `sys.path`, so
+the suite runs against an editable install **or** straight from a checkout.
+
+Default (fast, safe subset defined in the root `pyproject.toml`):
 
 ```bash
-python3 -m pytest packages/melos-core/tests/ -v
+python3 -m pytest
 ```
+
+Full suite across every package:
+
+```bash
+python3 -m pytest packages/melos-core/tests packages/melos-sim \
+  packages/melos-skin/tests packages/melos-blender/tests
+```
+
+Some tests are opt-in and skip automatically when their heavy backends are
+absent: MHR/skin tests need `melos-skin[mhr]` (`py-soma-x`, torch), and the
+high-fidelity MJCF import test needs `melos-sim[mjcf-import]` (`dm_control`).
+The compiler and the stdlib MJCF importer fallback need neither.
 
 ### Basic Usage
 
@@ -195,14 +210,16 @@ For more detailed information, see the files in the `docs/` directory:
 
 *   `architecture.md`: High-level system design.
 *   `core-api-reference.md`: API documentation for the core domain model, including the scaling pipeline.
+*   `core-developer-guide.md`: Contributor guide for extending `melos.core` models, validation, JSON I/O, and scaling.
 *   `mujoco-compiler.md`: Details on the MJCF translation process.
 *   `blender-addon-guide.md`: User guide for the Blender authoring environment.
+*   `blender-developer-guide.md`: Contributor guide for addon operators, panels, scene tagging, bpy_io builders, importers, and fake-bpy tests.
 *   `developer-guide.md`: Contribution guidelines and development workflow.
 *   `workflow-guide.md`: End-to-end tutorial from modeling to simulation, including subject-specific scaling.
 
 ## Namespace Strategy
 
-melos uses PEP 420 namespace packages. There is no shared `__init__.py` file in the `melos/` directory within any package. This allows each package (`core`, `blender`, `mujoco`) to be installed independently and maintained as a separate codebase while appearing under the same logical `melos` namespace.
+melos uses PEP 420 namespace packages. There is no shared `__init__.py` file in the `melos/` directory within any package. This allows each package (`core`, `blender`, `skin`, `sim`) to be installed independently and maintained as a separate codebase while appearing under the same logical `melos` namespace.
 
 ## License
 

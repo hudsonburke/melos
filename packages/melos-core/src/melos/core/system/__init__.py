@@ -6,17 +6,20 @@ from .enums import (
     ConstraintPolicy,
     GeometryRole,
     InterfaceKind,
+    RouteNodeKind,
     SensorKind,
     SystemRole,
 )
 from .model import (
     Actuator,
+    CableParameters,
     AssemblyConnection,
     AssemblyEndpoint,
     CoordinateCoupling,
     Geometry,
     Joint,
     Link,
+    RouteNode,
     Sensor,
     Site,
     SystemAssembly,
@@ -25,6 +28,7 @@ from .model import (
 
 __all__ = [
     "Actuator",
+    "CableParameters",
     "ActuatorKind",
     "AssemblyConnection",
     "AssemblyEndpoint",
@@ -36,6 +40,8 @@ __all__ = [
     "InterfaceKind",
     "Joint",
     "Link",
+    "RouteNode",
+    "RouteNodeKind",
     "Sensor",
     "SensorKind",
     "Site",
