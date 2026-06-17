@@ -77,30 +77,30 @@ The `Project` is the root aggregate of the framework, defined in `melos.core.pro
 
 ### Installation
 
-Install the packages in editable mode to ensure the namespace is correctly recognized:
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
 
 ```bash
-pip install -e ./packages/melos-core
-pip install -e ./packages/melos-skin
-pip install -e ./packages/melos-blender
-pip install -e ./packages/melos-sim
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone and sync
+git clone <repo-url> && cd melos
+uv sync              # installs melos-core + melos-sim + dev tools
+uv sync --all-packages  # also installs melos-skin + melos-blender
 ```
 
 ### Running Tests
 
-The test `conftest.py` files put each sibling package's `src/` on `sys.path`, so
-the suite runs against an editable install **or** straight from a checkout.
-
-Default (fast, safe subset defined in the root `pyproject.toml`):
+Default (fast, safe subset):
 
 ```bash
-python3 -m pytest
+uv run pytest
 ```
 
 Full suite across every package:
 
 ```bash
-python3 -m pytest packages/melos-core/tests packages/melos-sim \
+uv run pytest packages/melos-core/tests packages/melos-sim \
   packages/melos-skin/tests packages/melos-blender/tests
 ```
 

@@ -32,23 +32,20 @@ melos/
 
 ## Canonical commands
 
-Install editable packages:
+Install with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-pip install -e ./packages/melos-core
-pip install -e ./packages/melos-skin
-pip install -e ./packages/melos-blender
-pip install -e ./packages/melos-sim
+uv sync --all-packages
 ```
 
 Run core tests:
 
 ```bash
-pytest -q packages/melos-core/tests
+uv run pytest packages/melos-core/tests
 ```
 
 Build the Blender addon:
 
 ```bash
-python3 packages/melos-blender/scripts/build_blender_addon.py --output-dir dist
+uv run python packages/melos-blender/scripts/build_blender_addon.py --output-dir dist
 ```

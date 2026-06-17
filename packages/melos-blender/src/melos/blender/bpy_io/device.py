@@ -6,14 +6,21 @@ from typing import cast
 from melos.core.common.types import Bounds
 from melos.core.kinematics.enums import CoordinateKind, JointKind
 from melos.core.kinematics.model import CoordinateDefinition
-from melos.core.system.enums import ActuatorKind, InterfaceKind, SensorKind, SystemRole
-from melos.core.system.model import Actuator, Joint, Link, Sensor, Site, SystemModel
+from melos.core.system.enums import ActuatorKind, InterfaceKind, RouteNodeKind, SensorKind, SystemRole
+from melos.core.system.model import Actuator, Joint, Link, RouteNode, Sensor, Site, SystemModel
 
 from melos.blender.constants import (
+    CABLE_ACTUATOR_ID_KEY,
+    CABLE_ROUTE_GEOMETRY_ID_KEY,
+    CABLE_ROUTE_NODE_KIND_KEY,
+    CABLE_ROUTE_ORDER_KEY,
+    CABLE_ROUTE_SIDE_SITE_ID_KEY,
+    CABLE_ROUTE_SITE_ID_KEY,
     DEVICE_ACTUATOR_COORDINATE_ID_KEY,
     DEVICE_ACTUATOR_KIND,
     DEVICE_ACTUATOR_KIND_KEY,
     DEVICE_ACTUATOR_JOINT_ID_KEY,
+    DEVICE_CABLE_ROUTE_POINT_KIND,
     DEVICE_FRAME_KIND,
     DEVICE_FRAME_LINK_ID_KEY,
     DEVICE_INTERFACE_ASSET_ID_KEY,
@@ -51,6 +58,7 @@ def build_device_from_scene(scene: object, settings: object) -> SystemModel:
     sensor_objects = list(_iter_scene_objects(scene, DEVICE_SENSOR_KIND))
     actuator_objects = list(_iter_scene_objects(scene, DEVICE_ACTUATOR_KIND))
     interface_objects = list(_iter_scene_objects(scene, DEVICE_INTERFACE_KIND))
+    cable_route_objects = list(_iter_scene_objects(scene, DEVICE_CABLE_ROUTE_POINT_KIND))
 
     links = [_build_device_link(obj) for obj in link_objects]
     sites = [_build_device_frame(obj) for obj in frame_objects]
@@ -58,6 +66,8 @@ def build_device_from_scene(scene: object, settings: object) -> SystemModel:
     joints = [_build_device_joint(obj) for obj in joint_objects]
     sensors = [_build_device_sensor(obj) for obj in sensor_objects]
     actuators = [_build_device_actuator(obj) for obj in actuator_objects]
+
+    _attach_cable_routes(actuators, cable_route_objects)
 
     root_link_id = getattr(settings, "device_root_link_id", None) or None
     return build_system_model(
@@ -70,6 +80,36 @@ def build_device_from_scene(scene: object, settings: object) -> SystemModel:
         joints=joints,
         sensors=sensors,
         actuators=actuators,
+    )
+
+
+def _attach_cable_routes(actuators: list[Actuator], route_objects: list[object]) -> None:
+    """Group cable route points by actuator, sort by order, and attach as route nodes."""
+    if not route_objects:
+        return
+    cable_actuators = {a.id: a for a in actuators if a.kind == ActuatorKind.CABLE}
+    if not cable_actuators:
+        return
+    grouped: dict[str, list[tuple[float, object]]] = {}
+    for obj in route_objects:
+        actuator_id = _optional_string(obj, CABLE_ACTUATOR_ID_KEY)
+        if not actuator_id or actuator_id not in cable_actuators:
+            continue
+        order = float(getattr(obj, "get", lambda *_: 0.0)(CABLE_ROUTE_ORDER_KEY, 0.0))
+        grouped.setdefault(actuator_id, []).append((order, obj))
+    for actuator_id, items in grouped.items():
+        items.sort(key=lambda x: x[0])
+        cable_actuators[actuator_id].route = [_build_route_node(obj) for _, obj in items]
+
+
+def _build_route_node(object_: object) -> RouteNode:
+    node_kind_str = _optional_string(object_, CABLE_ROUTE_NODE_KIND_KEY) or "site"
+    node_kind = RouteNodeKind(node_kind_str)
+    return RouteNode(
+        kind=node_kind,
+        site_id=_optional_string(object_, CABLE_ROUTE_SITE_ID_KEY) or None,
+        geometry_id=_optional_string(object_, CABLE_ROUTE_GEOMETRY_ID_KEY) or None,
+        side_site_id=_optional_string(object_, CABLE_ROUTE_SIDE_SITE_ID_KEY) or None,
     )
 
 

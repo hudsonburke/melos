@@ -8,9 +8,9 @@ from enum import StrEnum
 class SolverType(StrEnum):
     """MuJoCo-compatible constraint solver algorithms."""
 
-    PGS = "pgs"
-    CG = "cg"
-    NEWTON = "newton"
+    PGS = "PGS"
+    CG = "CG"
+    NEWTON = "Newton"
 
 
 class IntegratorType(StrEnum):

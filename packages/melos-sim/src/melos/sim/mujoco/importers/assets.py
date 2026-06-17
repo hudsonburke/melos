@@ -39,18 +39,13 @@ def map_assets(
         if mesh_scale is not None:
             annotations["mjcf_mesh_scale"] = mesh_scale
 
-        if directives.meshdir:
+        mesh_file_path = Path(mesh_file)
+        if mesh_file_path.is_absolute():
+            mesh_path = mesh_file_path
+        elif directives.meshdir:
             mesh_path = source_dir / directives.meshdir / mesh_file
         else:
             mesh_path = source_dir / mesh_file
-
-        if not mesh_path.exists():
-            report.add_warning(
-                code="MESH_NOT_FOUND",
-                message=f"Mesh file not found: {mesh_file}",
-                location="asset/mesh",
-            )
-            continue
 
         uri = str(mesh_path)
         if output_dir:

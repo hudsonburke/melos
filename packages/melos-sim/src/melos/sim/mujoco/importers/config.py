@@ -69,15 +69,16 @@ def map_simulation_config(
     solver_type = SolverType.NEWTON
     solver_str = option.get("solver")
     if solver_str is not None:
-        try:
-            solver_type = SolverType(solver_str.lower())
-        except ValueError:
+        _solver_by_lower = {s.value.lower(): s for s in SolverType}
+        parsed = _solver_by_lower.get(solver_str.strip().lower())
+        if parsed is not None:
+            solver_type = parsed
+        else:
             report.add_warning(
                 code="CONFIG_SOLVER_INVALID",
                 message=f"Unknown solver: {solver_str} (using default)",
                 location="<option>",
             )
-            solver_type = SolverType.NEWTON
 
     solver_iterations = 100
     iterations_str = option.get("iterations")

@@ -12,7 +12,7 @@ from melos.core.common.mechanics import InertialProperties
 from melos.core.common.types import Bounds, Transform, Vec3
 from melos.core.control.model import CommandChannel, ObservationChannel
 from melos.core.io.json import load_project
-from melos.core.kinematics.enums import JointKind
+from melos.core.kinematics.enums import CoordinateKind, JointKind
 from melos.core.project.model import Project
 from melos.core.system.enums import ActuatorKind, GeometryRole, RouteNodeKind, SensorKind, SystemRole
 from melos.core.system.model import Actuator, Geometry, Joint, Link, Sensor, Site, SystemModel
@@ -72,6 +72,7 @@ def compile_project(
     if project.simulation.noslip_iterations > 0:
         option_attrs["noslip_iterations"] = str(project.simulation.noslip_iterations)
     SubElement(root, "option", option_attrs)
+    SubElement(root, "compiler", {"angle": "radian", "balanceinertia": "true", "boundmass": "0.001", "boundinertia": "0.0001"})
 
     asset_lookup: dict[str, AssetRecord] = {asset.id: asset for asset in project.assets.items}
     _append_asset_section(root, project, asset_lookup, state)
@@ -158,7 +159,11 @@ def _append_asset_section(
     for system_id, link_id, asset_id in visual_refs:
         record = asset_lookup.get(asset_id)
         if record is not None and record.role == AssetRole.VISUAL:
-            SubElement(asset_section, "mesh", {"name": asset_id, "file": record.uri})
+            mesh_attrs: dict[str, str] = {"name": asset_id, "file": record.uri}
+            scale = record.annotations.get("mjcf_mesh_scale") or record.annotations.get("mjcf_geom_scale")
+            if scale is not None:
+                mesh_attrs["scale"] = scale
+            SubElement(asset_section, "mesh", mesh_attrs)
         else:
             state.report.add_warning(
                 code="visual.asset.unresolved",
@@ -347,18 +352,21 @@ def _append_visual_geoms(
     for asset_id in link.asset_ids:
         record = asset_lookup.get(asset_id)
         if record is not None and record.role == AssetRole.VISUAL:
-            SubElement(
-                body_element,
-                "geom",
-                {
-                    "name": f"visual_{system_id}_{asset_id}",
-                    "type": "mesh",
-                    "mesh": asset_id,
-                    "contype": "0",
-                    "conaffinity": "0",
-                    "group": "1",
-                },
-            )
+            attrs: dict[str, str] = {
+                "name": f"visual_{system_id}_{asset_id}",
+                "type": "mesh",
+                "mesh": asset_id,
+                "contype": "0",
+                "conaffinity": "0",
+                "group": "1",
+            }
+            pos = record.annotations.get("mjcf_geom_pos")
+            if pos is not None:
+                attrs["pos"] = pos
+            quat = record.annotations.get("mjcf_geom_quat")
+            if quat is not None:
+                attrs["quat"] = quat
+            SubElement(body_element, "geom", attrs)
 
 
 def _append_joint(body_element: Element, system_id: str, joint: Joint, state: _CompilerState) -> None:
@@ -425,14 +433,34 @@ def _append_joint(body_element: Element, system_id: str, joint: Joint, state: _C
         return
 
     if joint.kind == JointKind.CUSTOM:
-        state.report.add_warning(
-            code="joint.custom_unsupported",
-            message=(
-                f"Joint {joint.id!r} uses custom kind; the MuJoCo compiler cannot "
-                "lower custom joints."
-            ),
-            location=f"systems[{system_id}].joints[{joint.id}]",
-        )
+        # Compound joint with mixed translation/rotation coordinates.
+        # Emit each coordinate as a separate MuJoCo joint element.
+        if not joint.coordinates:
+            state.report.add_warning(
+                code="joint.custom_unsupported",
+                message=(
+                    f"Joint {joint.id!r} uses custom kind with no coordinates; "
+                    "the MuJoCo compiler cannot lower it."
+                ),
+                location=f"systems[{system_id}].joints[{joint.id}]",
+            )
+            return
+        first_name = None
+        for coordinate in joint.coordinates:
+            jtype = "slide" if coordinate.kind == CoordinateKind.TRANSLATION else "hinge"
+            attributes = {
+                "name": coordinate.id,
+                "type": jtype,
+                "axis": _format_vec3(coordinate.axis),
+            }
+            _apply_limits_and_reference(attributes, coordinate.limits, coordinate.default_value)
+            SubElement(body_element, "joint", attributes)
+            state.coordinate_joint_names[coordinate.id] = coordinate.id
+            if first_name is None:
+                first_name = coordinate.id
+        if first_name is not None:
+            state.joint_names[(system_id, joint.id)] = first_name
+            state.link_joint_names[(system_id, joint.child_link_id)] = first_name
         return
 
     if not joint.coordinates:
@@ -520,13 +548,32 @@ def _resolve_tendon_path(
 ) -> tuple[list[tuple[str, dict[str, str]]], int]:
     """Resolve an ordered tendon path, preferring ``route`` over legacy ``site_ids``."""
 
+    def _lookup_site(site_id: str) -> str | None:
+        """Look up a site name, first in the owning system then across all systems."""
+        name = state.site_names.get((system_id, site_id))
+        if name is not None:
+            return name
+        for key, n in state.site_names.items():
+            if key[1] == site_id:
+                return n
+        return None
+
+    def _lookup_wrap_geom(geometry_id: str) -> str | None:
+        name = state.wrap_geom_names.get((system_id, geometry_id))
+        if name is not None:
+            return name
+        for key, n in state.wrap_geom_names.items():
+            if key[1] == geometry_id:
+                return n
+        return None
+
     elements: list[tuple[str, dict[str, str]]] = []
     site_count = 0
     if actuator.route:
         for index, node in enumerate(actuator.route):
             location = f"systems[{system_id}].actuators[{actuator.id}].route[{index}]"
             if node.kind == RouteNodeKind.WRAP and node.geometry_id is not None:
-                geom_name = state.wrap_geom_names.get((system_id, node.geometry_id))
+                geom_name = _lookup_wrap_geom(node.geometry_id)
                 if geom_name is None:
                     state.report.add_warning(
                         code="tendon.wrap_unresolved",
@@ -539,14 +586,14 @@ def _resolve_tendon_path(
                     continue
                 wrap_attrs = {"geom": geom_name}
                 if node.side_site_id is not None:
-                    side_name = state.site_names.get((system_id, node.side_site_id))
+                    side_name = _lookup_site(node.side_site_id)
                     if side_name is not None:
                         wrap_attrs["sidesite"] = side_name
                 elements.append(("geom", wrap_attrs))
                 continue
             if node.site_id is None:
                 continue
-            site_name = state.site_names.get((system_id, node.site_id))
+            site_name = _lookup_site(node.site_id)
             if site_name is None:
                 state.report.add_warning(
                     code="tendon.site_unresolved",
@@ -599,8 +646,20 @@ def _append_tendon_actuators(actuator_element: Element, project: Project, state:
             if actuator.kind == ActuatorKind.MUSCLE:
                 backend_name = f"{system.id}_muscle_{actuator.id}"
                 attributes = {"name": backend_name, "tendon": tendon_name}
-                _apply_muscle_actuator_params(attributes, actuator)
-                SubElement(actuator_element, "muscle", attributes)
+                physiology = actuator.parameters.get("physiology")
+                if isinstance(physiology, dict) and "_raw_gainprm" in physiology:
+                    # Emit <general> with original attributes for round-trip fidelity.
+                    for attr in ("gainprm", "biasprm", "dynprm", "lengthrange"):
+                        raw = physiology.get(f"_raw_{attr}")
+                        if raw is not None:
+                            attributes[attr] = str(raw)
+                    force = physiology.get("max_isometric_force")
+                    if isinstance(force, (int, float)):
+                        attributes["force"] = _format_scalar(float(force))
+                    SubElement(actuator_element, "general", attributes)
+                else:
+                    _apply_muscle_actuator_params(attributes, actuator)
+                    SubElement(actuator_element, "muscle", attributes)
             else:
                 backend_name = f"{system.id}_actuator_{actuator.id}"
                 attributes = {"name": backend_name, "tendon": tendon_name}

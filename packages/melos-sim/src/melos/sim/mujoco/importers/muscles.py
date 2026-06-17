@@ -20,13 +20,13 @@ def map_muscle_physiology(
 ) -> dict[str, dict[str, float]]:
     result: dict[str, dict[str, float]] = {}
     for el in actuator_section:
-        if el.tag != "muscle":
+        if el.tag not in ("muscle", "general"):
             continue
         name = el.get("name")
         if not name:
             report.add_warning(
                 code="muscle.missing_name",
-                message="<muscle> element has no name attribute, skipping",
+                message=f"<{el.tag}> element has no name attribute, skipping",
                 location="actuator",
             )
             continue
@@ -39,8 +39,9 @@ def _extract_physiology(
     el: Element,
     name: str,
     report: ImportReport,
-) -> dict[str, float]:
-    result: dict[str, float] = {}
+) -> dict[str, object]:
+    result: dict[str, object] = {}
+    is_general = el.tag == "general"
 
     force_str = el.get("force")
     if force_str is not None:
@@ -56,7 +57,7 @@ def _extract_physiology(
         if abs(range_span) > 1e-12:
             result["optimal_fiber_length"] = (lr1 - lr0) / range_span
             result["tendon_slack_length"] = lr0 - result["optimal_fiber_length"] * r0
-    elif lengthrange_str is None:
+    elif lengthrange_str is None and not is_general:
         report.add_warning(
             code="muscle.missing_lengthrange",
             message=f"Muscle '{name}' has no lengthrange attribute; ofl and tsl cannot be computed",
@@ -67,6 +68,13 @@ def _extract_physiology(
         value = el.get(key)
         if value is not None:
             result[key] = float(value)
+
+    # Preserve raw <general> attributes for round-trip compilation.
+    if is_general:
+        for attr in ("gainprm", "biasprm", "dynprm", "lengthrange", "tendon"):
+            value = el.get(attr)
+            if value is not None:
+                result[f"_raw_{attr}"] = value
 
     return result
 
@@ -132,7 +140,12 @@ def map_muscle_paths(
             continue
 
         name_raw = spatial.get("name") or ""
-        muscle_id = name_raw.removesuffix("_tendon") if name_raw.endswith("_tendon") else name_raw
+        # Remove "_tendon" suffix (may be followed by "_left", "_right", "_l", "_r")
+        muscle_id = name_raw
+        for suffix in ("_tendon_left", "_tendon_right", "_tendon_l", "_tendon_r", "_tendon"):
+            if muscle_id.endswith(suffix):
+                muscle_id = muscle_id[: -len(suffix)] + suffix[len("_tendon"):]
+                break
 
         site_ids: list[str] = []
         wrap_ids: list[str] = []

@@ -12,6 +12,7 @@ from melos.core.system.model import Link
 
 from .defaults import DefaultClassMap, apply_defaults, get_active_class
 from .report import ImportReport
+from .quat_utils import euler_to_quat
 
 
 @dataclass(slots=True, kw_only=True)
@@ -24,17 +25,6 @@ class BodyInfo:
 
 BodyTree = dict[str, BodyInfo]
 
-
-def euler_to_quat(euler_str: str) -> tuple[float, float, float, float]:
-    ex, ey, ez = [float(x) for x in euler_str.split()]
-    cx, sx = math.cos(ex / 2), math.sin(ex / 2)
-    cy, sy = math.cos(ey / 2), math.sin(ey / 2)
-    cz, sz = math.cos(ez / 2), math.sin(ez / 2)
-    w = cx * cy * cz + sx * sy * sz
-    x = sx * cy * cz - cx * sy * sz
-    y = cx * sy * cz + sx * cy * sz
-    z = cx * cy * sz - sx * sy * cz
-    return (w, x, y, z)
 
 
 def _parse_inertial(element: Element) -> InertialProperties | None:

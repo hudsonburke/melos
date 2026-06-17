@@ -1,17 +1,46 @@
-[tool.pytest.ini_options]
-testpaths = [
-  # Keep the default suite on the currently active MHR/MuJoCo example path.
-  # Broader legacy and high-surface-area suites can still be run explicitly.
-  "packages/melos-core/tests/test_skin_binding.py",
-  "packages/melos-blender/tests/test_packaging.py",
-  "packages/melos-skin/tests/test_core_adapters.py",
-  "packages/melos-skin/tests/test_example_project_operator.py",
+[project]
+name = "melos"
+version = "0.1.0"
+description = "Musculoskeletal modeling and cable-driven exoskeleton design framework"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "melos-core",
+    "melos-sim",
+]
+
+[project.optional-dependencies]
+mujoco = ["mujoco>=3.0"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pyright>=1.1",
+]
+all = [
+    "melos-core",
+    "melos-sim",
+    "melos-skin",
+    "melos-blender",
 ]
 
 [tool.uv.workspace]
 members = [
-  "packages/melos-core",
-  "packages/melos-blender",
-  "packages/melos-sim",
-  "packages/melos-skin",
+    "packages/melos-core",
+    "packages/melos-blender",
+    "packages/melos-sim",
+    "packages/melos-skin",
+]
+
+[tool.uv.sources]
+melos-core = { workspace = true }
+melos-sim = { workspace = true }
+melos-skin = { workspace = true }
+melos-blender = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = [
+    "packages/melos-core/tests",
+    "packages/melos-sim",
+    "packages/melos-skin/tests",
 ]

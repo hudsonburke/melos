@@ -261,18 +261,16 @@ If the feature has no visible spatial object, prefer one explicit Empty with cus
 
 ## Development commands
 
-Editable install from the repository root:
+Install with [uv](https://docs.astral.sh/uv/) from the repository root:
 
 ```bash
-python3 -m pip install -e ./packages/melos-core
-python3 -m pip install -e ./packages/melos-skin
-python3 -m pip install -e ./packages/melos-blender
+uv sync --all-packages
 ```
 
 Focused fake-bpy tests:
 
 ```bash
-python3 -m pytest packages/melos-core/tests/test_blender_device.py \
+uv run pytest packages/melos-core/tests/test_blender_device.py \
   packages/melos-core/tests/test_blender_importer.py \
   packages/melos-core/tests/test_blender_cable.py -q
 ```
@@ -280,7 +278,7 @@ python3 -m pytest packages/melos-core/tests/test_blender_device.py \
 Build the installable addon zip:
 
 ```bash
-python3 packages/melos-blender/scripts/build_blender_addon.py --output-dir dist
+uv run python packages/melos-blender/scripts/build_blender_addon.py --output-dir dist
 ```
 
 The packaged addon bundles `melos.blender`, `melos.core`, and the minimal `melos.skin` pieces needed by the current UI surface.

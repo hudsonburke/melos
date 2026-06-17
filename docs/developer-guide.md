@@ -21,13 +21,10 @@ Each package contains its source code under a `src/melos/{subpackage}/` director
 
 ## Development Setup
 
-To set up a local development environment, install the packages in editable mode from the repository root. Python 3.12 or higher is required.
+To set up a local development environment, use [uv](https://docs.astral.sh/uv/) from the repository root. Python 3.12 or higher is required.
 
 ```bash
-python3 -m pip install -e ./packages/melos-core[dev]
-python3 -m pip install -e ./packages/melos-skin
-python3 -m pip install -e ./packages/melos-blender
-python3 -m pip install -e ./packages/melos-sim
+uv sync --all-packages  # installs all workspace packages + dev tools
 ```
 
 ### Running Tests
@@ -35,13 +32,13 @@ python3 -m pip install -e ./packages/melos-sim
 Core tests live in `packages/melos-core/tests/` and cover core logic, Blender builders, MuJoCo compilation, and anatomical-system scaling. The root `pyproject.toml` defines a safe default test surface:
 
 ```bash
-python3 -m pytest
+uv run pytest
 ```
 
 Run the broad package suite before merging cross-package work:
 
 ```bash
-python3 -m pytest packages/melos-core/tests packages/melos-sim \
+uv run pytest packages/melos-core/tests packages/melos-sim \
   packages/melos-skin/tests packages/melos-blender/tests
 ```
 

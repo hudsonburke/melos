@@ -138,6 +138,13 @@ def _rule_anchor_joint_id(rule: Any) -> str | None:
 
 
 def _rule_tail_joint_id(rule: Any) -> str | None:
+    # Prefer reference_target_joint_ids for tail points when available.
+    # These define the visual reference direction for body segments like
+    # the clavicle, where the binding tail (LeftShoulder) differs from the
+    # visual reference tail (LeftArm).
+    reference_joint_ids = list(getattr(rule, "reference_target_joint_ids", ()) or ())
+    if len(reference_joint_ids) >= 2:
+        return str(reference_joint_ids[-1])
     target_joint_ids = list(getattr(rule, "target_joint_ids", ()) or ())
     if len(target_joint_ids) >= 2:
         return str(target_joint_ids[-1])

@@ -22,11 +22,10 @@ The core workflow revolves around reconstructing a `Project` from the Blender sc
 
 ### Developer Workflow
 
-To set up the development environment, install the core and blender packages in editable mode from the repository root:
+To set up the development environment, use [uv](https://docs.astral.sh/uv/) from the repository root:
 
 ```bash
-python3 -m pip install -e ./packages/melos-core
-python3 -m pip install -e ./packages/melos-blender
+uv sync --all-packages
 ```
 
 ### Loading in Blender

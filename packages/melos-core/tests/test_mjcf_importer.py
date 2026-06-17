@@ -151,3 +151,52 @@ def test_import_mjcf_collects_mesh_assets_from_default_class_mesh_geoms(tmp_path
     assert humerus.asset_ids == ["humerus_mesh"]
     assert mesh_asset.role is AssetRole.VISUAL
     assert mesh_asset.annotations["mjcf_geom_pos"] == "0 0 0.1"
+
+
+
+
+class TestEulerToQuat:
+    """Verify euler_to_quat matches MuJoCo's internal ZYX-intrinsic conversion."""
+
+    @staticmethod
+    def _euler_to_quat(euler_str: str) -> tuple[float, float, float, float]:
+        from melos.sim.mujoco.importers.quat_utils import euler_to_quat
+        return euler_to_quat(euler_str)
+
+    @staticmethod
+    def _mj_euler_to_quat(ex: float, ey: float, ez: float) -> tuple[float, float, float, float]:
+        """Get MuJoCo's own conversion via XML round-trip (with compiler angle='radian')."""
+        import mujoco
+        xml = (
+            '<mujoco>'
+            '<compiler angle="radian"/>'
+            '<worldbody>'
+            f'<body name="t" euler="{ex} {ey} {ez}"/>'
+            '</worldbody>'
+            '</mujoco>'
+        )
+        spec = mujoco.MjSpec.from_string(xml)
+        model = spec.compile()
+        q = model.body_quat[1]
+        return (float(q[0]), float(q[1]), float(q[2]), float(q[3]))
+
+    @pytest.mark.parametrize(
+        "ex,ey,ez",
+        [
+            (1.57, -1.57, 0),
+            (0, 0, 0),
+            (1.57, 0, 0),
+            (0, 1.57, 0),
+            (0, 0, 1.57),
+            (0.5, -0.3, 0.8),
+            (-0.785, 0.523, -0.262),
+            (3.0, -0.5, 1.2),
+        ],
+    )
+    def test_matches_mujoco(self, ex: float, ey: float, ez: float) -> None:
+        """euler_to_quat must match MuJoCo exactly for radian-valued euler strings."""
+        euler_str = f"{ex} {ey} {ez}"
+        our_quat = self._euler_to_quat(euler_str)
+        mj_quat = self._mj_euler_to_quat(ex, ey, ez)
+        for a, b in zip(our_quat, mj_quat):
+            assert abs(a - b) < 1e-12, f"Mismatch for ({ex}, {ey}, {ez}): ours={our_quat}, mj={mj_quat}"

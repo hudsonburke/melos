@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from xml.etree.ElementTree import fromstring
 
-from melos.core.common.types import Bounds
+from melos.core.common.types import Bounds, Transform
+from melos.core.kinematics.enums import CoordinateKind, JointKind
+from melos.core.kinematics.model import CoordinateDefinition
 from melos.core.project.model import Project
 from melos.core.system import (
     Actuator,
@@ -12,6 +14,7 @@ from melos.core.system import (
     CableParameters,
     Geometry,
     GeometryRole,
+    Joint,
     Link,
     RouteNode,
     RouteNodeKind,
@@ -160,3 +163,75 @@ def test_routed_muscle_emits_driving_actuator_and_wraps_geom() -> None:
 
     # A routed muscle wires the wrap geom directly, so no approximation warning fires.
     assert all(w.code != "muscle.wrap.approximation" for w in result.report.warnings)
+
+def test_cross_system_cable_route_resolves_anatomical_sites() -> None:
+    """Cable on a device system can reference sites on the anatomical system."""
+    from melos.core.common.types import Transform
+    from melos.core.kinematics.enums import JointKind
+
+    anatomical = SystemModel(
+        id="anatomical", name="Anatomical",
+        role=SystemRole.ANATOMICAL,
+        root_link_id="pelvis",
+        links=[
+            Link(id="pelvis", name="Pelvis", transform=Transform.identity()),
+            Link(id="femur", name="Femur", transform=Transform(translation=(0.0, -0.4, 0.0), rotation=(1.0, 0, 0, 0))),
+            Link(id="tibia", name="Tibia", transform=Transform(translation=(0.0, -0.4, 0.0), rotation=(1.0, 0, 0, 0))),
+        ],
+        joints=[
+            Joint(id="hip", name="Hip", kind=JointKind.REVOLUTE, parent_link_id="pelvis", child_link_id="femur",
+                  coordinates=[CoordinateDefinition(id="hip_flex", name="Hip Flexion", kind=CoordinateKind.ROTATION, axis=(1, 0, 0))]),
+            Joint(id="knee", name="Knee", kind=JointKind.REVOLUTE, parent_link_id="femur", child_link_id="tibia",
+                  coordinates=[CoordinateDefinition(id="knee_flex", name="Knee Flexion", kind=CoordinateKind.ROTATION, axis=(1, 0, 0))]),
+        ],
+        sites=[
+            Site(id="pelvis_anchor", name="Pelvis Anchor", link_id="pelvis", transform=Transform.identity()),
+            Site(id="tibia_insert", name="Tibia Insert", link_id="tibia", transform=Transform.identity()),
+        ],
+    )
+
+    device = SystemModel(
+        id="exo", name="Exo Device",
+        role=SystemRole.DEVICE,
+        root_link_id="exo_frame",
+        links=[Link(id="exo_frame", name="Exo Frame", transform=Transform.identity())],
+        sites=[],
+        geometries=[
+            Geometry(id="pulley", name="Pulley", kind="sphere", link_id="exo_frame",
+                     role=GeometryRole.WRAP, parameters={"radius": 0.015}),
+        ],
+        actuators=[
+            Actuator(
+                id="cable", name="Cable",
+                kind=ActuatorKind.CABLE,
+                route=[
+                    RouteNode(kind=RouteNodeKind.SITE, site_id="pelvis_anchor"),
+                    RouteNode(kind=RouteNodeKind.WRAP, geometry_id="pulley"),
+                    RouteNode(kind=RouteNodeKind.SITE, site_id="tibia_insert"),
+                ],
+                cable=CableParameters(stiffness=1000.0, damping=1.0, rest_length=0.2),
+            ),
+        ],
+    )
+
+    project = Project(systems=[anatomical, device])
+    result = compile_project(project, validate=False)
+    root = fromstring(result.mjcf_text)
+
+    # Cable tendon should resolve across systems.
+    spatial = root.find("./tendon/spatial[@name='cable_cable']")
+    assert spatial is not None
+    site_elems = spatial.findall("site")
+    geom_elems = spatial.findall("geom")
+    assert len(site_elems) == 2, f"Expected 2 site waypoints, got {len(site_elems)}"
+    assert len(geom_elems) == 1, f"Expected 1 wrap geom, got {len(geom_elems)}"
+    assert geom_elems[0].get("geom") == "exo_wrap_pulley"
+
+    # Motor driving the cable tendon.
+    motor = root.find("./actuator/motor[@name='exo_actuator_cable']")
+    assert motor is not None
+    assert motor.get("tendon") == "cable_cable"
+
+    # No cross-system resolution warnings.
+    unresolved = [w for w in result.report.warnings if "unresolved" in w.code]
+    assert len(unresolved) == 0, f"Unexpected unresolved warnings: {unresolved}"
