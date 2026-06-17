@@ -9,6 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
+# Nix
+result
+
 resources/
 outputs/
 
