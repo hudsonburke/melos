@@ -3,10 +3,9 @@ from importlib import import_module
 from pathlib import Path
 
 from melos.core.assets.model import AssetLibrary, AssetRecord
-from melos.core.common.enums import AssetRole
-from melos.core.common.types import Transform
+from melos.core.common.types import AssetRole, Transform
 from melos.core.control.model import CommandChannel, ControlInterface, ObservationChannel
-from melos.core.kinematics.enums import CoordinateKind, JointKind
+from melos.core.kinematics.model import CoordinateKind, JointKind
 from melos.core.kinematics.model import CoordinateDefinition
 from melos.core.project.model import ProjectMeta, Project
 from melos.core.simulation.model import SimulationConfig

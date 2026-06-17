@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import math
 from collections.abc import Iterable
 from typing import Any
 
+from melos.core.common.transforms import vec3_length, vec3_sub
 from .model import JointPositionSet, SegmentMeasurement, SegmentMeasurementSet
 
 
@@ -41,11 +41,11 @@ def compute_segment_measurements_from_rules(
 
         if reduction_mode == "chain_sum":
             length = sum(
-                _distance(positions[joint_names[index]], positions[joint_names[index + 1]])
+                vec3_length(vec3_sub(positions[joint_names[index]], positions[joint_names[index + 1]]))
                 for index in range(len(joint_names) - 1)
             )
         else:
-            length = _distance(positions[joint_names[0]], positions[joint_names[-1]])
+            length = vec3_length(vec3_sub(positions[joint_names[0]], positions[joint_names[-1]]))
 
         items.append(
             SegmentMeasurement(
@@ -57,9 +57,3 @@ def compute_segment_measurements_from_rules(
         )
 
     return SegmentMeasurementSet(items=items, units=units or joint_positions.units)
-
-
-def _distance(a: tuple[float, float, float], b: tuple[float, float, float]) -> float:
-    return math.sqrt(
-        (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2
-    )

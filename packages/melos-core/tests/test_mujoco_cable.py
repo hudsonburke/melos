@@ -5,7 +5,7 @@ from __future__ import annotations
 from xml.etree.ElementTree import fromstring
 
 from melos.core.common.types import Bounds, Transform
-from melos.core.kinematics.enums import CoordinateKind, JointKind
+from melos.core.kinematics.model import CoordinateKind, JointKind
 from melos.core.kinematics.model import CoordinateDefinition
 from melos.core.project.model import Project
 from melos.core.system import (
@@ -167,7 +167,7 @@ def test_routed_muscle_emits_driving_actuator_and_wraps_geom() -> None:
 def test_cross_system_cable_route_resolves_anatomical_sites() -> None:
     """Cable on a device system can reference sites on the anatomical system."""
     from melos.core.common.types import Transform
-    from melos.core.kinematics.enums import JointKind
+    from melos.core.kinematics.model import JointKind
 
     anatomical = SystemModel(
         id="anatomical", name="Anatomical",

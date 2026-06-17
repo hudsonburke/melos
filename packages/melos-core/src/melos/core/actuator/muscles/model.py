@@ -5,12 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from melos.core.common.ids import Identifier
-from melos.core.common.metadata import AnnotationMap
-from melos.core.common.types import Vec3, ZERO_VEC3
+from melos.core.common.types import AnnotationMap, Vec3, ZERO_VEC3
 from melos.core.common.units import ANGLE_UNIT, FORCE_UNIT, LENGTH_UNIT
 from .enums import MusclePathPointKind
 from .geometry import MuscleGeometry, MuscleSimulationHints
-from .ids import MuscleId, MusclePathPointId
 
 
 @dataclass(slots=True, kw_only=True)
@@ -29,7 +27,7 @@ class MusclePhysiology:
 class MusclePathPoint:
     """Ordered point contributing to the canonical muscle path."""
 
-    id: MusclePathPointId
+    id: Identifier
     name: str
     kind: MusclePathPointKind
     link_id: Identifier | None = None
@@ -60,7 +58,7 @@ class MuscleModel:
     path-based definition.
     """
 
-    id: MuscleId
+    id: Identifier
     name: str
     path: MusclePath = field(default_factory=MusclePath)
     physiology: MusclePhysiology | None = None

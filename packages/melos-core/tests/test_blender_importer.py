@@ -51,7 +51,7 @@ from melos.blender.constants import (
     ANATOMICAL_SITE_KIND,
     ANATOMICAL_JOINT_KIND,
 )
-from melos.core.kinematics.enums import CoordinateKind, JointKind
+from melos.core.kinematics.model import CoordinateKind, JointKind
 from melos.core.kinematics.model import CoordinateDefinition
 from melos.core.project.model import ProjectMeta, Project
 from melos.core.system import (

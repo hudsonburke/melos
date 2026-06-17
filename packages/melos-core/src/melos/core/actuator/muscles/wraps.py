@@ -6,8 +6,7 @@ from dataclasses import dataclass, field
 from typing import TypeAlias
 
 from melos.core.common.ids import Identifier
-from melos.core.common.metadata import AnnotationMap
-from melos.core.common.types import Transform
+from melos.core.common.types import AnnotationMap, Transform
 from melos.core.common.units import LENGTH_UNIT
 from .enums import WrapGeometryKind
 

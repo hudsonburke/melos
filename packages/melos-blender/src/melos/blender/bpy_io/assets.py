@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from melos.core.assets.model import AssetLibrary, AssetRecord
-from melos.core.common.enums import AssetRole
+from melos.core.common.types import AssetRole
 
 from melos.blender.constants import (
     ASSET_ID_KEY,

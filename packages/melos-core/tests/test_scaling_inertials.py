@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from melos.core.common.mechanics import InertialProperties
-from melos.core.common.types import Transform
-from melos.core.contact.enums import ContactGeometryKind
+from melos.core.common.types import InertialProperties, Transform
+from melos.core.contact.model import ContactGeometryKind
 from melos.core.contact.model import ContactGeometry
 from melos.core.scaling.inertials import (
     scale_contact_geometries,

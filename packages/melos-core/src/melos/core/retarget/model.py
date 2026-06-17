@@ -3,8 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from melos.core.common.ids import Identifier
-from melos.core.common.metadata import AnnotationMap
-from melos.core.common.types import Vec3
+from melos.core.common.types import AnnotationMap, Vec3
 
 
 @dataclass(slots=True, kw_only=True)

@@ -9,7 +9,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
-from .schema import CURRENT_SCHEMA_VERSION
+CURRENT_SCHEMA_VERSION: str = "0.1.0"
 from melos.core.project.model import Project
 
 

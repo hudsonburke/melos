@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from melos.core.common.types import Transform
-from melos.core.kinematics.enums import JointKind
+from melos.core.kinematics.model import JointKind
 from melos.core.project.model import Project
 from melos.core.retarget.model import SegmentMeasurement, SegmentMeasurementSet
 from melos.core.scaling import (

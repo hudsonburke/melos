@@ -7,7 +7,6 @@ from .enums import (
     WrapGeometryKind,
 )
 from .geometry import MuscleGeometry, MuscleSimulationHints
-from .ids import MuscleId, MusclePathPointId, WrapGeometryId
 from .model import MuscleModel, MusclePath, MusclePathPoint, MusclePhysiology
 from .wraps import (
     CylinderWrapParameters,
@@ -18,11 +17,9 @@ from .wraps import (
 )
 
 __all__ = [
-    "MuscleId",
     "MuscleGeometry",
     "MuscleLineOfActionSource",
     "MuscleModel",
-    "MusclePathPointId",
     "MusclePathPointKind",
     "MusclePath",
     "MusclePathPoint",
@@ -34,6 +31,5 @@ __all__ = [
     "SphereWrapParameters",
     "TorusWrapParameters",
     "WrapGeometry",
-    "WrapGeometryId",
     "WrapGeometryKind",
 ]

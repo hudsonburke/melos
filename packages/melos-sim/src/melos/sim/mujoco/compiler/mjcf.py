@@ -7,12 +7,10 @@ from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, indent, tostring
 
 from melos.core.assets.model import AssetRecord
-from melos.core.common.enums import AssetRole
-from melos.core.common.mechanics import InertialProperties
-from melos.core.common.types import Bounds, Transform, Vec3
+from melos.core.common.types import AssetRole, Bounds, InertialProperties, Transform, Vec3
 from melos.core.control.model import CommandChannel, ObservationChannel
 from melos.core.io.json import load_project
-from melos.core.kinematics.enums import CoordinateKind, JointKind
+from melos.core.kinematics.model import CoordinateKind, JointKind
 from melos.core.project.model import Project
 from melos.core.system.enums import ActuatorKind, GeometryRole, RouteNodeKind, SensorKind, SystemRole
 from melos.core.system.model import Actuator, Geometry, Joint, Link, Sensor, Site, SystemModel

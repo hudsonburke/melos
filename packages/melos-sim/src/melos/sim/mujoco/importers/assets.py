@@ -7,7 +7,7 @@ from pathlib import Path
 from xml.etree.ElementTree import Element
 
 from melos.core.assets.model import AssetLibrary, AssetRecord
-from melos.core.common.enums import AssetRole
+from melos.core.common.types import AssetRole
 
 from .bodies import _build_quat_annotation
 from .xml_parser import CompilerDirectives

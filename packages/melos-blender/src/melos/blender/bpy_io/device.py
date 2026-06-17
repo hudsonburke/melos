@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from typing import cast
 
 from melos.core.common.types import Bounds
-from melos.core.kinematics.enums import CoordinateKind, JointKind
+from melos.core.kinematics.model import CoordinateKind, JointKind
 from melos.core.kinematics.model import CoordinateDefinition
 from melos.core.system.enums import ActuatorKind, InterfaceKind, RouteNodeKind, SensorKind, SystemRole
 from melos.core.system.model import Actuator, Joint, Link, RouteNode, Sensor, Site, SystemModel

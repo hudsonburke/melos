@@ -5,9 +5,27 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from melos.core.common.ids import Identifier
-from melos.core.common.metadata import AnnotationMap
-from melos.core.common.types import Vec3, Transform, ZERO_VEC3
-from melos.core.contact.enums import ContactGeometryKind, ContactFilterMode
+from enum import StrEnum
+
+from melos.core.common.types import AnnotationMap, Vec3, Transform, ZERO_VEC3
+
+
+class ContactGeometryKind(StrEnum):
+    """Geometric archetypes used to define contact surfaces."""
+
+    SPHERE = "sphere"
+    CAPSULE = "capsule"
+    BOX = "box"
+    CYLINDER = "cylinder"
+    MESH = "mesh"
+    PLANE = "plane"
+
+
+class ContactFilterMode(StrEnum):
+    """Whether a contact pair is included or excluded from simulation."""
+
+    INCLUDE = "include"
+    EXCLUDE = "exclude"
 
 
 @dataclass(slots=True, kw_only=True)

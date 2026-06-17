@@ -25,8 +25,7 @@ from melos.blender.constants import (
 )
 from melos.blender.services.example_alignment import reference_body_tail_dirs
 from melos.core.assets.model import AssetRecord
-from melos.core.common.enums import AssetRole
-from melos.core.common.types import Transform
+from melos.core.common.types import AssetRole, Transform
 from melos.core.project.skin import SkinAttachment, SkinAttachmentFit
 from melos.core.project.skin_binding import collapse_joint_weights_to_binding_spec
 from melos.core.system import (

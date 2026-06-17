@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from melos.core.validation.model import ValidationReport
+from melos.core.validation import ValidationReport
 
 
 def format_validation_report(report: ValidationReport) -> list[str]:

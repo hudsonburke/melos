@@ -6,7 +6,7 @@ from collections.abc import Iterable
 
 from melos.core.project.model import Project
 
-from .model import ValidationIssue
+from . import ValidationIssue
 
 
 def validate_references(project: Project) -> list[ValidationIssue]:

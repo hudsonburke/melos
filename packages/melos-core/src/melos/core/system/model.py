@@ -5,10 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from melos.core.common.ids import Identifier
-from melos.core.common.metadata import AnnotationMap
-from melos.core.common.mechanics import InertialProperties
-from melos.core.common.types import Bounds, Transform
-from melos.core.kinematics.enums import JointKind
+from melos.core.common.types import AnnotationMap, Bounds, InertialProperties, Transform
+from melos.core.kinematics.model import JointKind
 from melos.core.kinematics.model import CoordinateDefinition
 
 from .enums import (

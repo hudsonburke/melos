@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from melos.core.common.ids import Identifier
-from melos.core.common.metadata import AnnotationMap
-from melos.core.common.types import Transform
+from melos.core.common.types import AnnotationMap, Transform
 
 DEFAULT_SKIN_BINDING_MODE = "link_linear_blend"
 

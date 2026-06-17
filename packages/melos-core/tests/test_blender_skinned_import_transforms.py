@@ -7,7 +7,7 @@ from melos.core.common.types import Transform
 from melos.core.project.model import Project
 from melos.core.system.enums import SystemRole
 from melos.core.system.model import Joint, Link, SystemModel
-from melos.core.kinematics.enums import JointKind
+from melos.core.kinematics.model import JointKind
 
 
 def test_compute_system_link_world_transforms_follows_mjcf_parent_annotations() -> None:

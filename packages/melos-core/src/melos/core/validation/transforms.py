@@ -8,7 +8,7 @@ from melos.core.common.ids import is_valid_identifier
 from melos.core.common.transforms import is_finite_transform, is_finite_vec3, quaternion_norm
 from melos.core.project.model import Project
 
-from .model import ValidationIssue, ValidationSeverity
+from . import ValidationIssue, ValidationSeverity
 
 
 def validate_transforms(project: Project) -> list[ValidationIssue]:

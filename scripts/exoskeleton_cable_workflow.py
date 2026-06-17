@@ -20,7 +20,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 from melos.core.common.types import Transform
-from melos.core.kinematics.enums import CoordinateKind, JointKind
+from melos.core.kinematics.model import CoordinateKind, JointKind
 from melos.core.project.model import Project
 from melos.core.system import (
     Actuator,
@@ -366,7 +366,7 @@ def run_pipeline(*, with_skin: bool = False, output_dir: Path | None = None) -> 
                       f"{len(skin_bundle['faces'])} faces")
                 # Store skin attachment metadata.
                 from melos.core.assets.model import AssetRecord
-                from melos.core.common.enums import AssetRole
+                from melos.core.common.types import AssetRole
                 from melos.core.project.skin import SkinAttachment, SkinAttachmentFit
 
                 skin_fit = SkinAttachmentFit(

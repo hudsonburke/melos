@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 
-from melos.core.common.enums import AssetRole
+from melos.core.common.types import AssetRole
 from melos.core.system.enums import ActuatorKind, GeometryRole, SystemRole
 from melos.sim.mujoco.importers.report import ImportReport, ImportWarning
 

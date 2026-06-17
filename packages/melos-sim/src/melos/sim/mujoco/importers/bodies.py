@@ -6,8 +6,7 @@ import math
 from dataclasses import dataclass
 from xml.etree.ElementTree import Element
 
-from melos.core.common.mechanics import InertialProperties
-from melos.core.common.types import Transform
+from melos.core.common.types import InertialProperties, Transform
 from melos.core.system.model import Link
 
 from .defaults import DefaultClassMap, apply_defaults, get_active_class

@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-import math
 from collections import deque
 
+from melos.core.common.transforms import vec3_length
 from melos.core.common.types import Vec3
 from melos.core.scaling.skeleton import SegmentNode
 
 JointCorrespondenceMap = dict[str, str]
 ScaleFactorMap = dict[str, float]
-
-
-def _vec3_norm(v: Vec3) -> float:
-    return math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
 
 
 def compute_scale_factors(
@@ -38,8 +34,8 @@ def compute_scale_factors(
                 raise ValueError(
                     f"Anatomical joint '{joint_name}' not found in link_vectors"
                 )
-            link_length = _vec3_norm(link_vectors[joint_name])
-            ref_length = _vec3_norm(node.position)
+            link_length = vec3_length(link_vectors[joint_name])
+            ref_length = vec3_length(node.position)
             if ref_length < 1e-12:
                 result[link_id] = 1.0
             else:

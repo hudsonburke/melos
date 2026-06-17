@@ -9,12 +9,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from melos.core.common.enums import AssetRole
 from melos.core.common.ids import Identifier
-from melos.core.common.metadata import AnnotationMap
-from melos.core.common.types import Vec3
+from melos.core.common.types import AnnotationMap, AssetRole, Vec3
+from enum import StrEnum
+
 from melos.core.common.units import ACCELERATION_UNIT, DEFAULT_GRAVITY
-from melos.core.simulation.enums import IntegratorType, SolverType
+
+
+class SolverType(StrEnum):
+    """MuJoCo-compatible constraint solver algorithms."""
+
+    PGS = "PGS"
+    CG = "CG"
+    NEWTON = "Newton"
+
+
+class IntegratorType(StrEnum):
+    """MuJoCo-compatible numerical integrators."""
+
+    EULER = "euler"
+    IMPLICIT = "implicit"
+    IMPLICITFAST = "implicitfast"
+    RK4 = "rk4"
 
 
 @dataclass(slots=True, kw_only=True)

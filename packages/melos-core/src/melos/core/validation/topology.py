@@ -7,7 +7,7 @@ from collections import Counter
 from melos.core.project.model import Project
 from melos.core.system.enums import ActuatorKind
 
-from .model import ValidationIssue, ValidationSeverity
+from . import ValidationIssue, ValidationSeverity
 
 
 def validate_topology(project: Project) -> list[ValidationIssue]:

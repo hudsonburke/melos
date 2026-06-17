@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 from typing import Any, cast
 
-from melos.core.kinematics.enums import CoordinateKind, JointKind
+from melos.core.kinematics.model import CoordinateKind, JointKind
 from melos.core.system.enums import ActuatorKind, RouteNodeKind, SensorKind
 
 from melos.blender.constants import (

@@ -1,7 +1,6 @@
 """Simulation-facing configuration models for melos core."""
 
-from .enums import IntegratorType, SolverType
-from .model import SimulationConfig
+from .model import IntegratorType, SimulationConfig, SolverType
 
 __all__ = [
     "IntegratorType",

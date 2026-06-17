@@ -292,7 +292,7 @@ def _joint_delta(
     coordinates: list[Any],
     coordinate_values: dict[str, float],
 ) -> Transform:
-    from melos.core.kinematics.enums import CoordinateKind, JointKind
+    from melos.core.kinematics.model import CoordinateKind, JointKind
 
     if kind == JointKind.FIXED:
         return Transform.identity()

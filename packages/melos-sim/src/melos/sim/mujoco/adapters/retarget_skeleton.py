@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
-from melos.core.kinematics.enums import JointKind
+from melos.core.kinematics.model import JointKind
 from melos.core.retarget.alignment import (
     SimilarityTransform,
     apply_similarity,

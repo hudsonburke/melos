@@ -6,7 +6,7 @@ import math
 from xml.etree.ElementTree import Element
 
 from melos.core.common.types import Bounds, Vec3
-from melos.core.kinematics.enums import CoordinateKind, JointKind
+from melos.core.kinematics.model import CoordinateKind, JointKind
 from melos.core.kinematics.model import CoordinateDefinition
 from melos.core.system.model import Joint
 
