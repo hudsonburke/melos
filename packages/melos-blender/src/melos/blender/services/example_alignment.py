@@ -4,7 +4,8 @@ import math
 from pathlib import Path
 from typing import Any, Callable
 
-from melos.blender.bpy_io.skinned_import import compute_project_link_world_transforms, rotate_vector_by_quaternion
+from melos.blender.bpy_io.skinned_import import compute_project_link_world_transforms
+from melos.core.common.transforms import rotate_vector
 from melos.core.retarget import (
     SimilarityTransform,
     compute_joint_alignment_similarity,
@@ -27,35 +28,6 @@ from melos.skin.adapters.skin_bundle import measure_example_skin_segments
 
 _REPO_ROOT = Path(__file__).resolve().parents[6]
 
-
-EXAMPLE_KINEMATIC_SCALE_LINKS: dict[str, tuple[str, ...]] = {
-    "head": ("head",),
-    "left_upper_arm": ("ulna_l",),
-    "left_forearm": ("radius_l", "lunate_l"),
-    "left_thigh": ("tibia_l",),
-    "left_shank": ("talus_l",),
-    "left_foot": ("toes_l",),
-    "right_upper_arm": ("ulna_r",),
-    "right_forearm": ("radius_r", "lunate_r"),
-    "right_thigh": ("tibia_r",),
-    "right_shank": ("talus_r",),
-    "right_foot": ("toes_r",),
-}
-
-
-EXAMPLE_MESH_SCALE_LINKS: dict[str, tuple[str, ...]] = {
-    "head": ("head",),
-    "left_upper_arm": ("humerus_l",),
-    "left_forearm": ("ulna_l", "radius_l"),
-    "left_foot": ("talus_l", "calcn_l", "toes_l"),
-    "left_shank": ("tibia_l",),
-    "left_thigh": ("femur_l",),
-    "right_upper_arm": ("humerus_r",),
-    "right_forearm": ("ulna_r", "radius_r"),
-    "right_foot": ("talus_r", "calcn_r", "toes_r"),
-    "right_shank": ("tibia_r",),
-    "right_thigh": ("femur_r",),
-}
 
 
 def scale_project_to_example_skin(
@@ -305,61 +277,6 @@ def target_alignment_points(
     }
 
 
-def _point_landmarks(
-    source_points: dict[str, tuple[float, float, float]],
-    target_points: dict[str, tuple[float, float, float]],
-) -> tuple[dict[str, tuple[float, float, float]], dict[str, tuple[float, float, float]]]:
-    landmark_segments = {
-        "pelvis": "pelvis",
-        "head": "head",
-        "left_thigh": "left_thigh",
-        "right_thigh": "right_thigh",
-    }
-    source_landmarks: dict[str, tuple[float, float, float]] = {}
-    target_landmarks: dict[str, tuple[float, float, float]] = {}
-    for landmark_name, segment_id in landmark_segments.items():
-        source_point = source_points.get(segment_id)
-        target_point = target_points.get(segment_id)
-        if source_point is None or target_point is None:
-            continue
-        source_landmarks[landmark_name] = source_point
-        target_landmarks[landmark_name] = target_point
-    return source_landmarks, target_landmarks
-
-
-def _skin_alignment_points(
-    skin_joints: dict[str, tuple[float, float, float]],
-    translation_map: Any | None,
-) -> dict[str, tuple[float, float, float]]:
-    if translation_map is None:
-        default_map = {
-            "pelvis": "Hips",
-            "spine": "Spine1",
-            "thorax": "Spine1",
-            "neck": "Chest",
-            "head": "Neck1",
-            "left_upper_arm": "LeftShoulder",
-            "left_forearm": "LeftArm",
-            "right_upper_arm": "RightShoulder",
-            "right_forearm": "RightArm",
-            "left_thigh": "LeftLeg",
-            "left_shank": "LeftShin",
-            "left_foot": "LeftFoot",
-            "right_thigh": "RightLeg",
-            "right_shank": "RightShin",
-            "right_foot": "RightFoot",
-        }
-        return {
-            link_id: skin_joints[joint_name]
-            for link_id, joint_name in default_map.items()
-            if joint_name in skin_joints
-        }
-
-    return {
-        rule.target_link_id: skin_joints[joint_name]
-        for rule in translation_map.rules
-        if (joint_name := rule_body_anchor_joint(rule)) is not None and joint_name in skin_joints
-    }
 
 
 def solve_axis_aligned_similarity(
@@ -738,9 +655,9 @@ def _asset_local_point_to_world(
     geom_transform = _asset_geom_transform(asset)
     geom_scaled = apply_scale(local_point, geom_transform["mesh_scale"])
     geom_scaled = apply_scale(geom_scaled, geom_transform["scale"])
-    geom_rotated = rotate_vector_by_quaternion(geom_transform["rotation"], geom_scaled)
+    geom_rotated = rotate_vector(geom_transform["rotation"], geom_scaled)
     geom_positioned = add(geom_rotated, geom_transform["translation"])
-    world_offset = rotate_vector_by_quaternion(link_transform.rotation, geom_positioned)
+    world_offset = rotate_vector(link_transform.rotation, geom_positioned)
     return add(link_transform.translation, world_offset)
 
 
@@ -843,45 +760,10 @@ def _parse_scale_string(value: str | None) -> tuple[float, float, float]:
     return (parts[0], parts[1], parts[2])
 
 
-def example_unit_scale(segment_scale_factors: dict[str, float]) -> float:
-    _ = segment_scale_factors
-    return 0.01
-
-
-def example_body_scale_factors(segment_scale_factors: dict[str, float], unit_scale: float) -> dict[str, float]:
-    ratio = {
-        segment_id: (unit_scale / factor)
-        for segment_id, factor in segment_scale_factors.items()
-        if unit_scale > 1e-12 and factor > 1e-12
-    }
-    return {
-        link_id: ratio[segment_id]
-        for segment_id, link_ids in EXAMPLE_MESH_SCALE_LINKS.items()
-        for link_id in link_ids
-        if segment_id in ratio
-    }
-
-
-def example_kinematic_scale_factors(segment_scale_factors: dict[str, float], unit_scale: float) -> dict[str, float]:
-    ratio = {
-        segment_id: (unit_scale / factor)
-        for segment_id, factor in segment_scale_factors.items()
-        if unit_scale > 1e-12 and factor > 1e-12
-    }
-    return {
-        link_id: ratio[segment_id]
-        for segment_id, link_ids in EXAMPLE_KINEMATIC_SCALE_LINKS.items()
-        for link_id in link_ids
-        if segment_id in ratio
-    }
-
-
 def apply_scale(vertex: tuple[float, float, float], scale: tuple[float, float, float]) -> tuple[float, float, float]:
     return (vertex[0] * scale[0], vertex[1] * scale[1], vertex[2] * scale[2])
 
 
-def apply_uniform_scale(vertex: tuple[float, float, float], scale: float) -> tuple[float, float, float]:
-    return (vertex[0] * scale, vertex[1] * scale, vertex[2] * scale)
 
 
 def rule_body_anchor_joint(rule: Any) -> str | None:

@@ -599,9 +599,6 @@ class _FakeModifier:
         self.object: Any = None
 
 
-def rotate_vector_by_quaternion(q: tuple[float, float, float, float], v: tuple[float, float, float]) -> tuple[float, float, float]:
-    """Rotate vector *v* by quaternion *q*. public API wrapper."""
-    return rotate_vector(q, v)
 
 
 __all__ = [
@@ -610,5 +607,4 @@ __all__ = [
     "build_weighted_mesh_object",
     "compute_project_link_world_transforms",
     "compute_system_link_world_transforms",
-    "rotate_vector_by_quaternion",
 ]

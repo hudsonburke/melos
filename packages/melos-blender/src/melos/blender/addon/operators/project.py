@@ -179,7 +179,8 @@ def _create_muscle_display_objects(
     *,
     create_mesh_object: Callable[[str, Any, Any], Any] | None = None,
 ) -> list[Any]:
-    from melos.blender.bpy_io.skinned_import import build_weighted_mesh_object, rotate_vector_by_quaternion
+    from melos.core.common.transforms import rotate_vector
+    from melos.blender.bpy_io.skinned_import import build_weighted_mesh_object
     from melos.core.system.enums import ActuatorKind
 
     anatomical_system = project.get_anatomical_system() if hasattr(project, "get_anatomical_system") else None
@@ -211,7 +212,7 @@ def _create_muscle_display_objects(
                 float(site.transform.translation[1]),
                 float(site.transform.translation[2]),
             )
-            offset = rotate_vector_by_quaternion(link_transform.rotation, point_position)
+            offset = rotate_vector(link_transform.rotation, point_position)
             world_point = (
                 link_transform.translation[0] + offset[0],
                 link_transform.translation[1] + offset[1],
@@ -272,8 +273,8 @@ def _create_body_mesh_objects(
         _default_bone_tail,
         build_mesh_object,
         build_weighted_mesh_object,
-        rotate_vector_by_quaternion,
     )
+    from melos.core.common.transforms import rotate_vector
 
     anatomical_system = project.get_anatomical_system() if hasattr(project, "get_anatomical_system") else None
     if anatomical_system is None:
@@ -336,13 +337,13 @@ def _create_body_mesh_objects(
                 mesh_scaled_vertex = _apply_scale(vertex_tuple, geom_transform['mesh_scale'])
                 scaled_vertex = _apply_scale(mesh_scaled_vertex, geom_transform['scale'])
                 scaled_vertex = _apply_uniform_scale(scaled_vertex, body_scale)
-                geom_rotated = rotate_vector_by_quaternion(geom_transform['rotation'], scaled_vertex)
+                geom_rotated = rotate_vector(geom_transform['rotation'], scaled_vertex)
                 geom_positioned = (
                     geom_rotated[0] + scaled_geom_translation[0],
                     geom_rotated[1] + scaled_geom_translation[1],
                     geom_rotated[2] + scaled_geom_translation[2],
                 )
-                rotated = rotate_vector_by_quaternion(display_transform.rotation, geom_positioned)
+                rotated = rotate_vector(display_transform.rotation, geom_positioned)
                 transformed_vertices.append([
                     display_transform.translation[0] + rotated[0],
                     display_transform.translation[1] + rotated[1],
@@ -403,23 +404,6 @@ def _asset_geom_transform(asset_record: Any) -> _GeomTransform:
     }
 
 
-def _load_obj_mesh(path: Path) -> tuple[list[list[float]], list[list[int]]]:
-    vertices: list[list[float]] = []
-    faces: list[list[int]] = []
-    with path.open(encoding="utf-8", errors="ignore") as handle:
-        for raw_line in handle:
-            line = raw_line.strip()
-            if line.startswith("v "):
-                _, xs, ys, zs = line.split()[:4]
-                vertices.append([float(xs), float(ys), float(zs)])
-            elif line.startswith("f "):
-                indices = []
-                for token in line.split()[1:4]:
-                    indices.append(int(token.split("/")[0]) - 1)
-                if len(indices) == 3:
-                    faces.append(indices)
-    return vertices, faces
-
 
 def _load_binary_stl_mesh(path: Path) -> tuple[list[list[float]], list[list[int]]]:
     data = path.read_bytes()
@@ -446,15 +430,6 @@ def _load_binary_stl_mesh(path: Path) -> tuple[list[list[float]], list[list[int]
     return vertices, faces
 
 
-def _scale_project_to_example_skin(
-    project: Any,
-    skin_joints: dict[str, tuple[float, float, float]],
-    translation_map: Any | None,
-) -> tuple[Any, dict[str, float]]:
-    from melos.blender.services.example_alignment import scale_project_to_example_skin
-
-    return scale_project_to_example_skin(project, skin_joints, translation_map)
-
 
 
 def _build_example_scale_report() -> list[str]:
@@ -477,13 +452,6 @@ def _compute_example_segment_scale_factors(
 
     return compute_example_segment_scale_factors(skin_joints, world_transforms, translation_map)
 
-
-def _build_example_target_joint_positions(
-    world_transforms: dict[str, Any],
-) -> dict[str, tuple[float, float, float]]:
-    from melos.sim.mujoco.adapters.example_source import build_example_target_joint_positions
-
-    return build_example_target_joint_positions(world_transforms)
 
 
 def _load_example_skin_reference_bundle(path: Path) -> dict[str, Any] | None:
@@ -512,54 +480,6 @@ def _rule_body_tail_joint(rule: Any) -> str | None:
 
     return rule_body_tail_joint(rule)
 
-
-def _collapse_joint_weights_to_bodies(
-    skin_bundle: dict[str, Any],
-    bodies: list[Any],
-    translation_map: Any | None,
-) -> tuple[list[list[float]], list[list[int]]]:
-    joint_to_body = _build_target_joint_to_body_map(skin_bundle["joint_names"], translation_map)
-    body_index_by_id = {body.id: index for index, body in enumerate(bodies)}
-    vertex_count = len(skin_bundle["vertices"])
-    vertex_body_weights: list[dict[int, float]] = [dict() for _ in range(vertex_count)]
-
-    weight_data = skin_bundle["weight_data"]
-    weight_indices = skin_bundle["weight_indices"]
-    weight_indptr = skin_bundle["weight_indptr"]
-    joint_names = skin_bundle["joint_names"]
-
-    for joint_index, joint_name in enumerate(joint_names):
-        body_id = joint_to_body.get(joint_name)
-        body_index = body_index_by_id.get(body_id or "")
-        if body_index is None:
-            continue
-        start = weight_indptr[joint_index]
-        end = weight_indptr[joint_index + 1]
-        for item_index in range(start, end):
-            vertex_index = weight_indices[item_index]
-            weight = weight_data[item_index]
-            if weight <= 0.0:
-                continue
-            accum = vertex_body_weights[vertex_index]
-            accum[body_index] = accum.get(body_index, 0.0) + weight
-
-    bone_weights: list[list[float]] = []
-    bone_indices: list[list[int]] = []
-    fallback_index = 0
-    for per_vertex in vertex_body_weights:
-        if not per_vertex:
-            bone_weights.append([1.0])
-            bone_indices.append([fallback_index])
-            continue
-        sorted_items = sorted(per_vertex.items(), key=lambda item: item[1], reverse=True)[:4]
-        total = sum(weight for _, weight in sorted_items)
-        if total <= 1e-8:
-            bone_weights.append([1.0])
-            bone_indices.append([fallback_index])
-            continue
-        bone_indices.append([index for index, _ in sorted_items])
-        bone_weights.append([weight / total for _, weight in sorted_items])
-    return bone_weights, bone_indices
 
 
 def _build_target_joint_to_body_map(
@@ -1041,25 +961,6 @@ def _read_float32(data: bytes, offset: int) -> float:
     return float(struct.unpack_from("<f", data, offset)[0])
 
 
-def _compute_example_skin_alignment(
-    project: Any,
-    world_transforms: dict[str, Any],
-    skin_template: Any,
-    translation_map: Any | None,
-) -> SimilarityTransform:
-    from melos.blender.services.example_alignment import compute_example_skin_alignment
-
-    return compute_example_skin_alignment(project, world_transforms, skin_template, translation_map)
-
-
-def _compute_skin_reference_alignment(
-    world_transforms: dict[str, Any],
-    skin_template: Any,
-    translation_map: Any | None,
-) -> SimilarityTransform:
-    from melos.blender.services.example_alignment import compute_skin_reference_alignment
-
-    return compute_skin_reference_alignment(world_transforms, skin_template, translation_map)
 
 
 def _align_generic_humanoid(vertices: list[list[float]], similarity: SimilarityTransform) -> list[list[float]]:
@@ -1068,22 +969,7 @@ def _align_generic_humanoid(vertices: list[list[float]], similarity: SimilarityT
     return align_generic_humanoid(vertices, similarity)
 
 
-def _reference_body_tail_dirs(translation_map: Any | None) -> dict[str, tuple[float, float, float]]:
-    from melos.blender.services.example_alignment import reference_body_tail_dirs
 
-    return reference_body_tail_dirs(translation_map)
-
-
-def _template_world_points(project: Any) -> dict[str, tuple[float, float, float]]:
-    from melos.blender.services.example_alignment import template_world_points
-
-    return template_world_points(project)
-
-
-def _bind_vertices_to_bodies(vertices: list[list[float]], bodies: list[Any], world_transforms: dict[str, Any]) -> tuple[list[list[float]], list[list[int]]]:
-    from melos.blender.services.example_alignment import bind_vertices_to_bodies
-
-    return bind_vertices_to_bodies(vertices, bodies, world_transforms)
 
 
 def _resolve_resource_path(packaged_relative: str, repo_relative: str) -> Path:

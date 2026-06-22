@@ -168,6 +168,13 @@ MELOSAddonSettings.__annotations__ = {
     "new_landmark_id": StringProperty(name="Landmark ID", default=""),
     "landmark_body_id": StringProperty(name="Link ID", default=""),
     "landmark_frame_id": StringProperty(name="Site ID", default=""),
+    "part_target_segment": StringProperty(name="Target Segment", default=""),
+    "part_type": EnumProperty(name="Part Type", items=[("cuff", "Cuff", ""), ("brace", "Brace", ""), ("strut", "Strut", "")], default="cuff"),
+    "part_limb_circumference": FloatProperty(name="Limb Circumference (m)", default=0.283, min=0.0),
+    "part_coverage": FloatProperty(name="Coverage", default=0.75, min=0.0, max=1.0),
+    "part_width": FloatProperty(name="Width (m)", default=0.04, min=0.0),
+    "part_wall_thickness": FloatProperty(name="Wall Thickness (m)", default=0.003, min=0.0),
+    "part_padding_thickness": FloatProperty(name="Padding (m)", default=0.002, min=0.0),
 }
 
 

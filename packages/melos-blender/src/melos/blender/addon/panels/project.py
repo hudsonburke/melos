@@ -38,18 +38,10 @@ class MELOS_PT_project(PanelBase):
         layout.prop(settings, "project_description")
         layout.prop(settings, "created_by")
         layout.separator()
-        layout.prop(settings, "time_step")
-        layout.prop(settings, "duration")
-        row = layout.row(align=True)
-        row.prop(settings, "gravity_x")
-        row.prop(settings, "gravity_y")
-        row.prop(settings, "gravity_z")
-        layout.separator()
         layout.prop(settings, "export_path")
         layout.operator("melos.validate_project")
         layout.operator("melos.export_project_json")
-        layout.operator("melos.create_example_project")
-        layout.operator("melos.create_example_model_project")
+        layout.separator()
         layout.operator("melos.analyze_example_scale")
 
         project_ops = importlib.import_module("melos.blender.addon.operators.project")
@@ -71,6 +63,27 @@ class MELOS_PT_project(PanelBase):
             )
 
 
-CLASSES = (MELOS_PT_project,)
+class MELOS_PT_project_sim_settings(PanelBase):
+    bl_label = "Simulation Settings"
+    bl_idname = "MELOS_PT_project_sim_settings"
+    bl_parent_id = "MELOS_PT_project"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = ADDON_NAME
+    bl_options = {"DEFAULT_CLOSED"}
 
-__all__ = ["CLASSES", "MELOS_PT_project"]
+    def draw(self, context):
+        layout = cast(Any, self).layout
+        settings = getattr(context.scene, SCENE_SETTINGS_ATTRIBUTE)
+        box = layout.box()
+        box.prop(settings, "time_step")
+        box.prop(settings, "duration")
+        row = box.row(align=True)
+        row.prop(settings, "gravity_x")
+        row.prop(settings, "gravity_y")
+        row.prop(settings, "gravity_z")
+
+
+CLASSES = (MELOS_PT_project, MELOS_PT_project_sim_settings)
+
+__all__ = ["CLASSES"]

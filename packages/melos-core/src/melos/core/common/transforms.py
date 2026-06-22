@@ -25,19 +25,6 @@ def quaternion_norm(quaternion: Quat) -> float:
     return sqrt(sum(component * component for component in quaternion))
 
 
-def normalize_quaternion(quaternion: Quat) -> Quat:
-    """Return a normalized quaternion.
-
-    The melos core model uses quaternions in ``(w, x, y, z)`` order.
-    """
-
-    norm = quaternion_norm(quaternion)
-    if norm == 0.0:
-        raise ValueError("Cannot normalize a zero quaternion.")
-
-    return tuple(component / norm for component in quaternion)  # type: ignore[return-value]
-
-
 def normalize_quaternion_or_identity(quaternion: Quat) -> Quat:
     norm = quaternion_norm(quaternion)
     if norm == 0.0:

@@ -202,6 +202,68 @@ class MELOS_OT_update_cable_visualization(OperatorBase):
         _report(self, {"INFO"}, "Updated cable visualizations.")
         return {"FINISHED"}
 
+class MELOS_OT_generate_part(OperatorBase):
+    bl_idname = "melos.generate_part"
+    bl_label = "Generate Part"
+
+    def execute(self, context):
+        settings = getattr(context.scene, SCENE_SETTINGS_ATTRIBUTE)
+        segment_id = settings.part_target_segment or "limb"
+
+        try:
+            from proteus.fitting import build_cuff
+        except ImportError:
+            _report(self, {"ERROR"}, "proteus is not installed. Install with: uv pip install 'proteus[melos]'")
+            return {"CANCELLED"}
+
+        from melos.core.retarget.model import SegmentMeasurementSet, SegmentMeasurement
+
+        measurements = SegmentMeasurementSet(
+            items=[SegmentMeasurement(segment_id=segment_id, length=settings.part_limb_circumference)],
+            units="m",
+        )
+
+        try:
+            cuff = build_cuff(
+                measurements,
+                segment_id,
+                coverage=settings.part_coverage,
+                width=settings.part_width * 1000,
+                wall_thickness=settings.part_wall_thickness * 1000,
+                padding_thickness=settings.part_padding_thickness * 1000,
+            )
+        except Exception as exc:
+            _report(self, {"ERROR"}, f"Part generation failed: {exc}")
+            return {"CANCELLED"}
+
+        import tempfile, os
+        stl_path = os.path.join(tempfile.gettempdir(), f"melos_part_{segment_id}.stl")
+
+        try:
+            import build123d as bd
+            bd.export_stl(cuff.geom, stl_path)
+        except Exception as exc:
+            _report(self, {"ERROR"}, f"STL export failed: {exc}")
+            return {"CANCELLED"}
+
+        try:
+            try:
+                bpy.ops.import_mesh.stl(filepath=stl_path)
+            except AttributeError:
+                bpy.ops.wm.stl_import(filepath=stl_path)
+        except Exception as exc:
+            _report(self, {"ERROR"}, f"STL import failed: {exc}")
+            return {"CANCELLED"}
+
+        obj = context.active_object
+        if obj is not None:
+            obj[ENTITY_KIND_KEY] = DEVICE_LINK_KIND
+            obj[ENTITY_ID_KEY] = segment_id
+            obj[DISPLAY_NAME_KEY] = f"{settings.part_type}_{segment_id}"
+
+        _report(self, {"INFO"}, f"Generated {settings.part_type} for segment {segment_id!r}.")
+        return {"FINISHED"}
+
 
 def _update_all_cable_curves(scene):
     """Create or update cable curves for all cable actuators."""
@@ -328,6 +390,7 @@ CLASSES = (
     MELOS_OT_create_device_actuator,
     MELOS_OT_create_cable_route_point,
     MELOS_OT_update_cable_visualization,
+    MELOS_OT_generate_part,
 )
 
 __all__ = [
@@ -335,6 +398,7 @@ __all__ = [
     "MELOS_OT_create_device_actuator",
     "MELOS_OT_create_cable_route_point",
     "MELOS_OT_update_cable_visualization",
+    "MELOS_OT_generate_part",
     "MELOS_OT_create_device_frame",
     "MELOS_OT_create_device_joint",
     "MELOS_OT_create_device_link",

@@ -8,7 +8,7 @@ from melos.core.assets.model import AssetLibrary
 from melos.core.common.ids import Identifier
 from melos.core.common.types import AnnotationMap
 from melos.core.control.model import ControlInterface
-from melos.core.io.json import CURRENT_SCHEMA_VERSION
+from melos.core.io.schema import CURRENT_SCHEMA_VERSION
 from melos.core.project.skin import SkinAttachment
 from melos.core.simulation.model import SimulationConfig
 from melos.core.retarget.translation import TranslationMap

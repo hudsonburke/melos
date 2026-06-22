@@ -1,10 +1,10 @@
 from __future__ import annotations
+import copy
 
 from dataclasses import dataclass, field
 from typing import Mapping, Sequence
 
 from melos.core.common.types import Transform, Vec3
-from melos.core.io.json import project_from_dict, project_to_dict
 from melos.core.project.model import Project
 from melos.core.retarget.model import SegmentMeasurementSet
 from melos.core.scaling.factors import JointCorrespondenceMap, ScaleFactorMap, compute_scale_factors
@@ -265,7 +265,7 @@ def scale_project_system(
 ) -> Project:
     """Return a cloned project whose selected system is scaled by *link_scale_factors*."""
 
-    cloned = project_from_dict(project_to_dict(project))
+    cloned = copy.deepcopy(project)
     target_system = _resolve_target_system(cloned, system_id)
     scaled_system = scale_system(target_system, link_scale_factors)
     cloned.systems = [
@@ -332,7 +332,7 @@ def scale_model(
     link_vectors: dict[str, Vec3],
     joint_map: JointCorrespondenceMap,
 ) -> Project:
-    cloned = project_from_dict(project_to_dict(project))
+    cloned = copy.deepcopy(project)
 
     if not joint_map or not link_vectors:
         return cloned

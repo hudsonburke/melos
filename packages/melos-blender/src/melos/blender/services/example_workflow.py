@@ -749,14 +749,6 @@ def _configure_example_skin_mesh_display(mesh_obj: Any) -> None:
 
 
 
-def _serialize_similarity(similarity: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "rotation": [list(row) for row in similarity.rotation],
-        "scale": float(similarity.scale),
-        "translation": [float(value) for value in similarity.translation],
-    }
-
-
 def _remove_default_startup_objects(scene: Any) -> None:
     project_ops = importlib.import_module("melos.blender.addon.operators.project")
     bpy = getattr(project_ops, "bpy", None)
