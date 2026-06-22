@@ -21,8 +21,6 @@
         {
           default = pkgs.mkShell {
             packages = with pkgs; [
-              fish
-              neovim
               pyright
               ruff
               uv

@@ -158,11 +158,6 @@ def vec3_centroid(points: list[Vec3]) -> Vec3:
     )
 
 
-# ---------------------------------------------------------------------------
-# Axis-angle conversion
-# ---------------------------------------------------------------------------
-
-
 def axis_angle_to_quat(axis: Vec3, angle: float) -> Quat:
     """Convert an axis + angle (radians) to a ``(w, x, y, z)`` quaternion.
 
