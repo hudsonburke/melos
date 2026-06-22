@@ -33,6 +33,7 @@ class MELOS_PT_subject(PanelBase):
     def draw(self, context):
         layout = cast(Any, self).layout
         settings = getattr(context.scene, SCENE_SETTINGS_ATTRIBUTE)
+        layout.operator("melos.import_mjcf")
         layout.operator("melos.import_project")
         layout.operator("melos.create_example_project")
         layout.operator("melos.create_example_model_project")

@@ -60,6 +60,148 @@ from melos.skin.mappings.myofullbody_to_human_v1 import (
 )
 
 
+
+def display_project_in_scene(
+    project: Any,
+    context: Any,
+    *,
+    create_object: Callable[[str, Any], Any] | None = None,
+    create_armature_object: Callable[[str, Any, Any], Any] | None = None,
+    create_mesh_object: Callable[[str, Any, Any], Any] | None = None,
+    translation_map: Any | None = None,
+    body_scale_factors: dict[str, float] | None = None,
+    body_display_scale_factors: dict[str, float] | None = None,
+    reference_body_anchors: dict[str, tuple[float, float, float]] | None = None,
+    reference_body_tail_points: dict[str, tuple[float, float, float]] | None = None,
+    source_body_tail_points: dict[str, tuple[float, float, float]] | None = None,
+    display_armature_system: Any | None = None,
+    armature_name: str = "anatomical_armature",
+    load_meshes: bool = False,
+) -> tuple[Any, Any | None, list[Any]]:
+    """Display a melos project in Blender with armature and body meshes.
+
+    Creates link/joint/site empties via import_project_to_scene, builds an
+    armature from the link hierarchy, loads body meshes with world-space
+    transforms, creates a display root for upright orientation, and hides
+    raw structural empties.
+
+    Returns (project, armature_obj, body_mesh_objects).
+    """
+    project_ops = importlib.import_module("melos.blender.addon.operators.project")
+
+    anatomical_system = project.get_anatomical_system()
+    if anatomical_system is None:
+        return project, None, []
+
+    scene = context.scene
+    settings = getattr(scene, SCENE_SETTINGS_ATTRIBUTE)
+    _remove_default_startup_objects(scene)
+
+    def _default_create(name: str, collection: Any) -> Any:
+        bpy = getattr(project_ops, "bpy", None)
+        if bpy is None:
+            raise RuntimeError(
+                "The melos add-on can only create objects inside Blender."
+            )
+        obj = bpy.data.objects.new(name, None)
+        obj.empty_display_type = "PLAIN_AXES"
+        collection.objects.link(obj)
+        return obj
+
+    effective_create = create_object if create_object is not None else _default_create
+    created = import_project_to_scene(
+        project, scene, settings, create_object=effective_create, load_meshes=load_meshes
+    )
+
+    body_objects = {
+        obj.get(ENTITY_ID_KEY): obj
+        for obj in created
+        if getattr(obj, "get", lambda *_: None)(ENTITY_KIND_KEY) == ANATOMICAL_LINK_KIND
+    }
+    world_transforms = compute_project_link_world_transforms(
+        project,
+        coordinate_values=project.simulation.initial_coordinate_values,
+    )
+
+    body_tail_dirs = reference_body_tail_dirs(translation_map)
+    effective_display_armature_system = display_armature_system if display_armature_system is not None else anatomical_system
+
+    arm_obj = build_armature_object(
+        project,
+        context,
+        create_armature_object=create_armature_object,
+        armature_name=armature_name,
+        reference_body_tail_dirs=body_tail_dirs,
+        target_system=effective_display_armature_system,
+    )
+
+    arm_obj[SKIN_REFERENCE_PROP] = True
+    if hasattr(arm_obj, "display_type"):
+        arm_obj.display_type = "WIRE"
+    arm_data = getattr(arm_obj, "data", None)
+    if arm_data is not None and hasattr(arm_data, "display_type"):
+        arm_data.display_type = "STICK"
+
+    body_mesh_objects = project_ops._create_body_mesh_objects(
+        project,
+        context,
+        arm_obj=arm_obj,
+        world_transforms=world_transforms,
+        body_objects=body_objects,
+        body_scale_factors=body_scale_factors or {},
+        body_display_scale_factors=body_display_scale_factors or {},
+        display_relationship_system=effective_display_armature_system,
+        create_mesh_object=create_mesh_object,
+        attach_to_armature=True,
+        reference_body_anchors=reference_body_anchors,
+        reference_body_tail_points=reference_body_tail_points,
+        reference_body_tail_dirs=body_tail_dirs,
+        source_body_tail_points=source_body_tail_points,
+        display_scale_factor=1.0,
+    )
+
+    _configure_example_reference_display(
+        arm_obj=arm_obj,
+        mesh_obj=None,
+        body_mesh_objects=body_mesh_objects,
+    )
+
+    ref_collection = project_ops._get_or_create_collection(
+        scene, SKIN_REFERENCE_COLLECTION
+    )
+    for body_mesh_obj in body_mesh_objects:
+        body_mesh_obj[SKIN_REFERENCE_PROP] = True
+        body_mesh_obj[SKIN_REFERENCE_KIND_PROP] = SKIN_REFERENCE_KIND_BODY_MESH
+        project_ops._link_to_collection(ref_collection, body_mesh_obj)
+    project_ops._link_to_collection(ref_collection, arm_obj)
+
+    muscle_objs: list[Any] = []
+    muscle_objs = project_ops._create_muscle_display_objects(
+        project,
+        context,
+        arm_obj,
+        world_transforms,
+        create_mesh_object=create_mesh_object,
+    )
+    for muscle_obj in muscle_objs:
+        muscle_obj[SKIN_REFERENCE_PROP] = True
+        project_ops._link_to_collection(ref_collection, muscle_obj)
+
+    display_root = _create_example_display_root(
+        scene,
+        world_transforms,
+        [obj for obj in (arm_obj, *body_mesh_objects, *muscle_objs) if obj is not None],
+        ref_collection=ref_collection,
+    )
+    if display_root is not None:
+        display_root[SKIN_REFERENCE_PROP] = True
+
+    _hide_example_support_objects(
+        [*created, *muscle_objs],
+        keep_objects=[obj for obj in (arm_obj, *body_mesh_objects) if obj is not None],
+    )
+
+    return project, arm_obj, body_mesh_objects
 def run_create_example_project(
     context: Any,
     *,
@@ -122,266 +264,278 @@ def run_create_example_project(
         if anatomical_link_ids
         else "pelvis"
     )
-    skin_fit = SkinAttachmentFit(
-        anchor_link_id=anchor_link_id,
-        rest_transform_in_anchor=Transform.identity(),
-        fit_coordinate_values=dict(project.simulation.initial_coordinate_values),
-        reference_link_ids=anatomical_link_ids[:4],
-        reference_site_ids=[],
-        reference_geometry_ids=[],
-    )
-    project.skin_attachments.append(
-        SkinAttachment(
-            id="skin_main",
-            name="Human Skin (myofullbody)",
-            target_system_id=anatomical_system.id
-            if anatomical_system is not None
-            else "anatomical",
-            mesh_asset_id="skin_mesh",
-            binding_asset_id="skin_binding",
-            fit=skin_fit,
-            translation_map_id=translation_map.id if translation_map is not None else None,
-        )
-    )
-    project.assets.items.append(
-        AssetRecord(
-            id="skin_mesh",
-            name="Human skin mesh",
-            role=AssetRole.VISUAL,
-            uri="",
-            media_type="model/obj",
-        )
-    )
-    project.assets.items.append(
-        AssetRecord(
-            id="skin_binding",
-            name="Human skin binding",
-            role=AssetRole.FITTING,
-            uri="",
-            media_type="application/vnd.melos.skin-binding+json",
-        )
-    )
-
-    scene = context.scene
-    settings = getattr(scene, SCENE_SETTINGS_ATTRIBUTE)
-    _remove_default_startup_objects(scene)
-
-    def _default_create(name: str, collection: Any) -> Any:
-        bpy = getattr(project_ops, "bpy", None)
-        if bpy is None:
-            raise RuntimeError(
-                "The melos add-on can only create objects inside Blender."
-            )
-        obj = bpy.data.objects.new(name, None)
-        obj.empty_display_type = "PLAIN_AXES"
-        collection.objects.link(obj)
-        return obj
-
-    effective_create = create_object if create_object is not None else _default_create
-    created = import_project_to_scene(
-        project, scene, settings, create_object=effective_create
-    )
-
-    body_objects = {
-        obj.get(ENTITY_ID_KEY): obj
-        for obj in created
-        if getattr(obj, "get", lambda *_: None)(ENTITY_KIND_KEY) == ANATOMICAL_LINK_KIND
-    }
-    bodies = anatomical_system.links if anatomical_system is not None else []
-    world_transforms = compute_project_link_world_transforms(
-        project,
-        coordinate_values=project.simulation.initial_coordinate_values,
-    )
-
-    mesh_obj = None
-    display_target_system = anatomical_system
-    display_armature_system = anatomical_system
-    body_tail_dirs = reference_body_tail_dirs(translation_map)
-    reference_body_anchors = None
-    reference_body_tail_points = None
-    body_mesh_reference_anchors = None
-    body_mesh_reference_tail_points = None
-    body_mesh_display_scale = 1.0
-    body_mesh_display_scale_factors: dict[str, float] = {}
-    body_mesh_source_tail_points: dict[str, tuple[float, float, float]] = {}
     if include_skin:
-        skin_bundle = example_mhr_skin_bundle
-        body_name_map = {i: body.id for i, body in enumerate(bodies)}
+        skin_fit = SkinAttachmentFit(
+            anchor_link_id=anchor_link_id,
+            rest_transform_in_anchor=Transform.identity(),
+            fit_coordinate_values=dict(project.simulation.initial_coordinate_values),
+            reference_link_ids=anatomical_link_ids[:4],
+            reference_site_ids=[],
+            reference_geometry_ids=[],
+        )
+        project.skin_attachments.append(
+            SkinAttachment(
+                id="skin_main",
+                name="Human Skin (myofullbody)",
+                target_system_id=anatomical_system.id
+                if anatomical_system is not None
+                else "anatomical",
+                mesh_asset_id="skin_mesh",
+                binding_asset_id="skin_binding",
+                fit=skin_fit,
+                translation_map_id=translation_map.id if translation_map is not None else None,
+            )
+        )
+        project.assets.items.append(
+            AssetRecord(
+                id="skin_mesh",
+                name="Human skin mesh",
+                role=AssetRole.VISUAL,
+                uri="",
+                media_type="model/obj",
+            )
+        )
+        project.assets.items.append(
+            AssetRecord(
+                id="skin_binding",
+                name="Human skin binding",
+                role=AssetRole.FITTING,
+                uri="",
+                media_type="application/vnd.melos.skin-binding+json",
+            )
+        )
 
-        if skin_bundle is not None and display_target_system is not None:
-            rigging_plan = build_example_human_mesh_rigging_plan(
-                display_target_system,
-                world_transforms,
-                skin_bundle["joints"],
-                translation_map,
-            )
-            display_armature_system = rigging_plan.display_system
-            binding_spec = rigging_plan.binding_spec
-            reference_body_anchors = dict(rigging_plan.reference_body_anchors)
-            reference_body_tail_points = dict(rigging_plan.reference_body_tail_points)
-            body_mesh_reference_anchors = dict(reference_body_anchors)
-            body_mesh_reference_tail_points = dict(reference_body_tail_points)
-            _extend_reference_body_points_with_hand_joints(
-                body_mesh_reference_anchors,
-                body_mesh_reference_tail_points,
-                skin_bundle["joints"],
-                rigging_plan.rest_alignment_similarity,
-            )
-            body_mesh_display_scale = _compute_example_body_mesh_display_scale(
-                world_transforms,
-                translation_map,
-                body_mesh_reference_anchors,
-                body_mesh_reference_tail_points,
-            )
-            body_mesh_display_scale_factors = _compute_example_body_mesh_display_scale_factors(
-                world_transforms,
-                translation_map,
-                body_mesh_reference_anchors,
-                body_mesh_reference_tail_points,
-            )
-            body_mesh_source_tail_points = _compute_example_body_mesh_source_tail_points(
-                world_transforms,
-                translation_map,
-            )
-            vertices = apply_similarity_to_vertices(
-                skin_bundle["vertices"],
-                rigging_plan.rest_alignment_similarity,
-            )
-            faces = skin_bundle["faces"]
-            body_name_map = {
-                link_index: link_id
-                for link_index, link_id in enumerate(binding_spec.deformer_link_ids)
-            }
-            bone_weights, bone_indices = collapse_joint_weights_to_binding_spec(
-                joint_names=skin_bundle["joint_names"],
-                weight_data=skin_bundle["weight_data"],
-                weight_indices=skin_bundle["weight_indices"],
-                weight_indptr=skin_bundle["weight_indptr"],
-                binding_spec=binding_spec,
-            )
-            if project.skin_attachments:
-                skin_attachment = project.skin_attachments[0]
-                skin_attachment.target_system_id = anatomical_system.id if anatomical_system is not None else display_target_system.id
-                fit = skin_attachment.fit
-                fit.anchor_link_id = binding_spec.anchor_link_id or anchor_link_id
-                fit.reference_link_ids = list(binding_spec.reference_link_ids)
-                fit.annotations.clear()
-                fit.fit_method = "mhr_rest_mesh_bound_to_mujoco_links_v1"
-                fit.annotations["skin_source_model"] = "mhr"
-                fit.annotations["skin_source_backend"] = "somax_mhr_identity"
-                fit.annotations["shape_source"] = "mhr_input_model"
-                fit.annotations["kinematics_source"] = "mujoco_system_rest_armature"
-                fit.annotations["display_rig"] = "mujoco_link_rig"
-                fit.annotations["binding_mode"] = "mhr_joint_weights_collapsed_to_mujoco_links"
-                fit.annotations["mesh_pose_source"] = "aligned_mhr_rest_mesh"
-                fit.annotations["retarget_link_layer"] = str(
-                    binding_spec.annotations.get("retarget_link_layer", "translation_map_source_links_v1")
+        scene = context.scene
+        settings = getattr(scene, SCENE_SETTINGS_ATTRIBUTE)
+        _remove_default_startup_objects(scene)
+
+        def _default_create(name: str, collection: Any) -> Any:
+            bpy = getattr(project_ops, "bpy", None)
+            if bpy is None:
+                raise RuntimeError(
+                    "The melos add-on can only create objects inside Blender."
                 )
-                fit.annotations["retarget_link_count"] = len(binding_spec.deformer_link_ids)
-                fit.annotations["mesh_deformation_in_blender"] = "armature_modifier"
-            arm_obj, mesh_obj = build_skinned_mesh_with_armature(
+            obj = bpy.data.objects.new(name, None)
+            obj.empty_display_type = "PLAIN_AXES"
+            collection.objects.link(obj)
+            return obj
+
+        effective_create = create_object if create_object is not None else _default_create
+        created = import_project_to_scene(
+            project, scene, settings, create_object=effective_create, load_meshes=False
+        )
+
+        body_objects = {
+            obj.get(ENTITY_ID_KEY): obj
+            for obj in created
+            if getattr(obj, "get", lambda *_: None)(ENTITY_KIND_KEY) == ANATOMICAL_LINK_KIND
+        }
+        bodies = anatomical_system.links if anatomical_system is not None else []
+        world_transforms = compute_project_link_world_transforms(
+            project,
+            coordinate_values=project.simulation.initial_coordinate_values,
+        )
+
+        mesh_obj = None
+        display_target_system = anatomical_system
+        display_armature_system = anatomical_system
+        body_tail_dirs = reference_body_tail_dirs(translation_map)
+        reference_body_anchors = None
+        reference_body_tail_points = None
+        body_mesh_reference_anchors = None
+        body_mesh_reference_tail_points = None
+        body_mesh_display_scale = 1.0
+        body_mesh_display_scale_factors: dict[str, float] = {}
+        body_mesh_source_tail_points: dict[str, tuple[float, float, float]] = {}
+        if include_skin:
+            skin_bundle = example_mhr_skin_bundle
+            body_name_map = {i: body.id for i, body in enumerate(bodies)}
+
+            if skin_bundle is not None and display_target_system is not None:
+                rigging_plan = build_example_human_mesh_rigging_plan(
+                    display_target_system,
+                    world_transforms,
+                    skin_bundle["joints"],
+                    translation_map,
+                )
+                display_armature_system = rigging_plan.display_system
+                binding_spec = rigging_plan.binding_spec
+                reference_body_anchors = dict(rigging_plan.reference_body_anchors)
+                reference_body_tail_points = dict(rigging_plan.reference_body_tail_points)
+                body_mesh_reference_anchors = dict(reference_body_anchors)
+                body_mesh_reference_tail_points = dict(reference_body_tail_points)
+                _extend_reference_body_points_with_hand_joints(
+                    body_mesh_reference_anchors,
+                    body_mesh_reference_tail_points,
+                    skin_bundle["joints"],
+                    rigging_plan.rest_alignment_similarity,
+                )
+                body_mesh_display_scale = _compute_example_body_mesh_display_scale(
+                    world_transforms,
+                    translation_map,
+                    body_mesh_reference_anchors,
+                    body_mesh_reference_tail_points,
+                )
+                body_mesh_display_scale_factors = _compute_example_body_mesh_display_scale_factors(
+                    world_transforms,
+                    translation_map,
+                    body_mesh_reference_anchors,
+                    body_mesh_reference_tail_points,
+                )
+                body_mesh_source_tail_points = _compute_example_body_mesh_source_tail_points(
+                    world_transforms,
+                    translation_map,
+                )
+                vertices = apply_similarity_to_vertices(
+                    skin_bundle["vertices"],
+                    rigging_plan.rest_alignment_similarity,
+                )
+                faces = skin_bundle["faces"]
+                body_name_map = {
+                    link_index: link_id
+                    for link_index, link_id in enumerate(binding_spec.deformer_link_ids)
+                }
+                bone_weights, bone_indices = collapse_joint_weights_to_binding_spec(
+                    joint_names=skin_bundle["joint_names"],
+                    weight_data=skin_bundle["weight_data"],
+                    weight_indices=skin_bundle["weight_indices"],
+                    weight_indptr=skin_bundle["weight_indptr"],
+                    binding_spec=binding_spec,
+                )
+                if project.skin_attachments:
+                    skin_attachment = project.skin_attachments[0]
+                    skin_attachment.target_system_id = anatomical_system.id if anatomical_system is not None else display_target_system.id
+                    fit = skin_attachment.fit
+                    fit.anchor_link_id = binding_spec.anchor_link_id or anchor_link_id
+                    fit.reference_link_ids = list(binding_spec.reference_link_ids)
+                    fit.annotations.clear()
+                    fit.fit_method = "mhr_rest_mesh_bound_to_mujoco_links_v1"
+                    fit.annotations["skin_source_model"] = "mhr"
+                    fit.annotations["skin_source_backend"] = "somax_mhr_identity"
+                    fit.annotations["shape_source"] = "mhr_input_model"
+                    fit.annotations["kinematics_source"] = "mujoco_system_rest_armature"
+                    fit.annotations["display_rig"] = "mujoco_link_rig"
+                    fit.annotations["binding_mode"] = "mhr_joint_weights_collapsed_to_mujoco_links"
+                    fit.annotations["mesh_pose_source"] = "aligned_mhr_rest_mesh"
+                    fit.annotations["retarget_link_layer"] = str(
+                        binding_spec.annotations.get("retarget_link_layer", "translation_map_source_links_v1")
+                    )
+                    fit.annotations["retarget_link_count"] = len(binding_spec.deformer_link_ids)
+                    fit.annotations["mesh_deformation_in_blender"] = "armature_modifier"
+                arm_obj, mesh_obj = build_skinned_mesh_with_armature(
+                    project,
+                    vertices,
+                    faces,
+                    bone_weights,
+                    bone_indices,
+                    body_name_map,
+                    context,
+                    create_armature_object=create_armature_object,
+                    create_mesh_object=create_mesh_object,
+                    armature_name="myofullbody_armature",
+                    mesh_name="myofullbody_skin",
+                    reference_body_anchors=reference_body_anchors,
+                    reference_body_tail_points=reference_body_tail_points,
+                    reference_body_tail_dirs=body_tail_dirs,
+                    target_system=display_armature_system,
+                )
+        else:
+            arm_obj = build_armature_object(
                 project,
-                vertices,
-                faces,
-                bone_weights,
-                bone_indices,
-                body_name_map,
                 context,
                 create_armature_object=create_armature_object,
-                create_mesh_object=create_mesh_object,
                 armature_name="myofullbody_armature",
-                mesh_name="myofullbody_skin",
-                reference_body_anchors=reference_body_anchors,
-                reference_body_tail_points=reference_body_tail_points,
                 reference_body_tail_dirs=body_tail_dirs,
-                target_system=display_armature_system,
             )
-    else:
-        arm_obj = build_armature_object(
-            project,
-            context,
-            create_armature_object=create_armature_object,
-            armature_name="myofullbody_armature",
-            reference_body_tail_dirs=body_tail_dirs,
-        )
 
-    arm_obj[SKIN_REFERENCE_PROP] = True
-    if mesh_obj is not None:
-        mesh_obj[SKIN_REFERENCE_PROP] = True
-    if hasattr(arm_obj, "display_type"):
-        arm_obj.display_type = "WIRE"
-    arm_data = getattr(arm_obj, "data", None)
-    if arm_data is not None and hasattr(arm_data, "display_type"):
-        arm_data.display_type = "STICK"
-    if mesh_obj is not None:
-        _hide_non_deforming_bones(arm_obj, bone_weights, bone_indices, body_name_map)
+        arm_obj[SKIN_REFERENCE_PROP] = True
+        if mesh_obj is not None:
+            mesh_obj[SKIN_REFERENCE_PROP] = True
+        if hasattr(arm_obj, "display_type"):
+            arm_obj.display_type = "WIRE"
+        arm_data = getattr(arm_obj, "data", None)
+        if arm_data is not None and hasattr(arm_data, "display_type"):
+            arm_data.display_type = "STICK"
+        if mesh_obj is not None:
+            _hide_non_deforming_bones(arm_obj, bone_weights, bone_indices, body_name_map)
 
-    body_mesh_objects: list[Any] = []
-    if display_target_system is anatomical_system:
-        body_mesh_objects = project_ops._create_body_mesh_objects(
-            project,
-            context,
+        body_mesh_objects: list[Any] = []
+        if display_target_system is anatomical_system:
+            body_mesh_objects = project_ops._create_body_mesh_objects(
+                project,
+                context,
+                arm_obj=arm_obj,
+                world_transforms=world_transforms,
+                body_objects=body_objects,
+                body_scale_factors=body_scale_factors,
+                body_display_scale_factors=body_mesh_display_scale_factors,
+                # Use the retarget display SystemModel's parent relationships for
+                # body-mesh visualization; Blender should not invent a different
+                # clavicle/arm hierarchy from the raw MuJoCo body tree.
+                display_relationship_system=display_armature_system,
+                create_mesh_object=create_mesh_object,
+                attach_to_armature=mesh_obj is None,
+                reference_body_anchors=body_mesh_reference_anchors or reference_body_anchors,
+                reference_body_tail_points=body_mesh_reference_tail_points or reference_body_tail_points,
+                reference_body_tail_dirs=body_tail_dirs,
+                source_body_tail_points=body_mesh_source_tail_points,
+                display_scale_factor=body_mesh_display_scale,
+            )
+
+        _configure_example_reference_display(
             arm_obj=arm_obj,
-            world_transforms=world_transforms,
-            body_objects=body_objects,
-            body_scale_factors=body_scale_factors,
-            body_display_scale_factors=body_mesh_display_scale_factors,
-            # Use the retarget display SystemModel's parent relationships for
-            # body-mesh visualization; Blender should not invent a different
-            # clavicle/arm hierarchy from the raw MuJoCo body tree.
-            display_relationship_system=display_armature_system,
-            create_mesh_object=create_mesh_object,
-            attach_to_armature=mesh_obj is None,
-            reference_body_anchors=body_mesh_reference_anchors or reference_body_anchors,
-            reference_body_tail_points=body_mesh_reference_tail_points or reference_body_tail_points,
-            reference_body_tail_dirs=body_tail_dirs,
-            source_body_tail_points=body_mesh_source_tail_points,
-            display_scale_factor=body_mesh_display_scale,
+            mesh_obj=mesh_obj,
+            body_mesh_objects=body_mesh_objects,
         )
 
-    _configure_example_reference_display(
-        arm_obj=arm_obj,
-        mesh_obj=mesh_obj,
-        body_mesh_objects=body_mesh_objects,
-    )
+        ref_collection = project_ops._get_or_create_collection(
+            scene, SKIN_REFERENCE_COLLECTION
+        )
+        for body_mesh_obj in body_mesh_objects:
+            body_mesh_obj[SKIN_REFERENCE_PROP] = True
+            body_mesh_obj[SKIN_REFERENCE_KIND_PROP] = SKIN_REFERENCE_KIND_BODY_MESH
+            project_ops._link_to_collection(ref_collection, body_mesh_obj)
+        project_ops._link_to_collection(ref_collection, arm_obj)
+        if mesh_obj is not None:
+            project_ops._link_to_collection(ref_collection, mesh_obj)
 
-    ref_collection = project_ops._get_or_create_collection(
-        scene, SKIN_REFERENCE_COLLECTION
-    )
-    for body_mesh_obj in body_mesh_objects:
-        body_mesh_obj[SKIN_REFERENCE_PROP] = True
-        body_mesh_obj[SKIN_REFERENCE_KIND_PROP] = SKIN_REFERENCE_KIND_BODY_MESH
-        project_ops._link_to_collection(ref_collection, body_mesh_obj)
-    project_ops._link_to_collection(ref_collection, arm_obj)
-    if mesh_obj is not None:
-        project_ops._link_to_collection(ref_collection, mesh_obj)
+        muscle_objs: list[Any] = []
+        if display_target_system is anatomical_system and mesh_obj is None:
+            muscle_objs = project_ops._create_muscle_display_objects(
+                project,
+                context,
+                arm_obj,
+                world_transforms,
+                create_mesh_object=create_mesh_object,
+            )
+        for muscle_obj in muscle_objs:
+            muscle_obj[SKIN_REFERENCE_PROP] = True
+            project_ops._link_to_collection(ref_collection, muscle_obj)
 
-    muscle_objs: list[Any] = []
-    if display_target_system is anatomical_system and mesh_obj is None:
-        muscle_objs = project_ops._create_muscle_display_objects(
+        display_root = _create_example_display_root(
+            scene,
+            world_transforms,
+            [obj for obj in (arm_obj, mesh_obj, *body_mesh_objects, *muscle_objs) if obj is not None],
+            ref_collection=ref_collection,
+        )
+        if display_root is not None:
+            display_root[SKIN_REFERENCE_PROP] = True
+
+        _hide_example_support_objects(
+            [*created, *muscle_objs],
+            keep_objects=[obj for obj in (arm_obj, mesh_obj, *body_mesh_objects) if obj is not None],
+        )
+
+    else:
+        project, _, _ = display_project_in_scene(
             project,
             context,
-            arm_obj,
-            world_transforms,
+            create_object=create_object,
+            create_armature_object=create_armature_object,
             create_mesh_object=create_mesh_object,
+            translation_map=translation_map,
+            armature_name="myofullbody_armature",
         )
-    for muscle_obj in muscle_objs:
-        muscle_obj[SKIN_REFERENCE_PROP] = True
-        project_ops._link_to_collection(ref_collection, muscle_obj)
-
-    display_root = _create_example_display_root(
-        scene,
-        world_transforms,
-        [obj for obj in (arm_obj, mesh_obj, *body_mesh_objects, *muscle_objs) if obj is not None],
-        ref_collection=ref_collection,
-    )
-    if display_root is not None:
-        display_root[SKIN_REFERENCE_PROP] = True
-
-    _hide_example_support_objects(
-        [*created, *muscle_objs],
-        keep_objects=[obj for obj in (arm_obj, mesh_obj, *body_mesh_objects) if obj is not None],
-    )
 
     return project
 

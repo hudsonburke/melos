@@ -7,6 +7,10 @@ from melos.core.project.model import Project
 from melos.core.system.enums import ActuatorKind, GeometryRole, SystemRole
 
 from melos.blender.constants import (
+    ASSET_ID_KEY,
+    ASSET_NAME_KEY,
+    ASSET_ROLE_KEY,
+    ASSET_URI_KEY,
     ATTACHMENT_DEVICE_ID_KEY,
     ATTACHMENT_INTERFACE_ID_KEY,
     ATTACHMENT_KIND,
@@ -72,6 +76,7 @@ from melos.blender.constants import (
     MUSCLE_WRAP_HEIGHT_KEY,
     MUSCLE_WRAP_KIND_KEY,
     MUSCLE_WRAP_RADIUS_KEY,
+    ANATOMICAL_LINK_ASSET_KIND,
     ANATOMICAL_LINK_KIND,
     ANATOMICAL_SITE_KIND,
     ANATOMICAL_JOINT_KIND,
@@ -92,6 +97,65 @@ def _default_create_object(name: str, collection: Any) -> Any:  # pragma: no cov
     collection.objects.link(obj)
     return obj
 
+def _load_stl_mesh_data(path: str) -> tuple[list[tuple[float, float, float]], list[tuple[int, int, int]]] | None:
+    """Read a binary STL file and return (vertices, faces) or None on failure."""
+    import os
+    import struct
+    if not os.path.isfile(path):
+        return None
+    try:
+        data = open(path, "rb").read()
+        triangle_count = struct.unpack_from("<I", data, 80)[0]
+        offset = 84
+        vertices: list[tuple[float, float, float]] = []
+        faces: list[tuple[int, int, int]] = []
+        for _ in range(triangle_count):
+            if offset + 50 > len(data):
+                break
+            offset += 12  # skip normal
+            v0 = struct.unpack_from("<fff", data, offset)
+            v1 = struct.unpack_from("<fff", data, offset + 12)
+            v2 = struct.unpack_from("<fff", data, offset + 24)
+            base = len(vertices)
+            vertices.extend([v0, v1, v2])
+            faces.append((base, base + 1, base + 2))
+            offset += 36 + 2  # 3 vertices + attribute byte
+        return vertices, faces
+    except Exception:
+        return None
+
+
+def _create_mesh_object(name: str, vertices: list, faces: list, collection: Any) -> Any | None:
+    """Create a Blender mesh object from vertex/face data."""
+    if bpy is None:
+        return None
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata(
+        [list(v) for v in vertices],
+        [],
+        [list(f) for f in faces],
+    )
+    mesh.update()
+    obj = bpy.data.objects.new(name, mesh)
+    collection.objects.link(obj)
+    return obj
+
+
+def _import_mesh_asset(uri: str, name: str, collection: Any) -> Any | None:
+    """Import a mesh file into Blender and return the created object."""
+    if bpy is None:
+        return None
+    data = _load_stl_mesh_data(uri)
+    if data is None:
+        return None
+    vertices, faces = data
+    if not vertices or not faces:
+        return None
+    obj = _create_mesh_object(name, vertices, faces, collection)
+    if obj is not None:
+        obj[ASSET_URI_KEY] = uri
+    return obj
+
 
 def import_project_to_scene(
     project: Project,
@@ -99,6 +163,7 @@ def import_project_to_scene(
     settings: Any,
     *,
     create_object: Callable[[str, Any], Any] | None = None,
+    load_meshes: bool = True,
 ) -> list[Any]:
     if create_object is None:
         create_object = _default_create_object  # pragma: no cover
@@ -122,7 +187,46 @@ def import_project_to_scene(
             if system.role != SystemRole.ANATOMICAL:
                 obj[DEVICE_LINK_ID_KEY] = link.id
             _apply_transform(obj, link.transform)
+            if hasattr(obj, "empty_display_size"):
+                obj.empty_display_size = 0.02
             link_objects[(system.id, link.id)] = obj
+
+        # Parent links according to joint hierarchy
+        for joint in system.joints:
+            child_link_id = joint.child_link_id
+            parent_link_id = joint.parent_link_id
+            if not child_link_id or not parent_link_id:
+                continue
+            child_obj = link_objects.get((system.id, child_link_id))
+            parent_obj = link_objects.get((system.id, parent_link_id))
+            if child_obj is not None and parent_obj is not None:
+                _set_parent(child_obj, parent_obj)
+
+        # Load visual mesh assets for links
+        if load_meshes:
+            asset_by_id = {a.id: a for a in project.assets.items}
+            for link in system.links:
+                if not link.asset_ids:
+                    continue
+                link_obj = link_objects.get((system.id, link.id))
+                if link_obj is None:
+                    continue
+                for asset_id in link.asset_ids:
+                    asset = asset_by_id.get(asset_id)
+                    if asset is None:
+                        continue
+                    # Only import visual assets as mesh objects
+                    if str(asset.role) != "visual":
+                        continue
+                    mesh_obj = _import_mesh_asset(asset.uri, f"{link.name}_mesh", collection)
+                    if mesh_obj is not None:
+                        mesh_obj[ENTITY_KIND_KEY] = ANATOMICAL_LINK_ASSET_KIND
+                        mesh_obj[ASSET_ID_KEY] = asset.id
+                        mesh_obj[ASSET_NAME_KEY] = asset.name
+                        mesh_obj[ASSET_ROLE_KEY] = str(asset.role)
+                        mesh_obj[ASSET_URI_KEY] = asset.uri
+                        _apply_transform(mesh_obj, link.transform)
+                        _set_parent_inherit(mesh_obj, link_obj)
 
         for joint in system.joints:
             if system.role == SystemRole.ANATOMICAL:
@@ -147,6 +251,10 @@ def import_project_to_scene(
                 obj[DEVICE_JOINT_PARENT_FRAME_ID_KEY] = joint.parent_site_id or ""
                 obj[DEVICE_JOINT_CHILD_FRAME_ID_KEY] = joint.child_site_id or ""
                 _apply_coordinate_properties(obj, joint)
+            if hasattr(obj, "hide_viewport"):
+                obj.hide_viewport = True
+            if hasattr(obj, "hide_render"):
+                obj.hide_render = True
 
         muscle_order_by_site_id = _muscle_site_metadata(system)
         for site in system.sites:
@@ -158,6 +266,10 @@ def import_project_to_scene(
                 obj[LANDMARK_BODY_ID_KEY] = site.link_id or ""
                 obj[LANDMARK_FRAME_ID_KEY] = site.parent_site_id or ""
                 _apply_transform(obj, site.transform)
+                if hasattr(obj, "hide_viewport"):
+                    obj.hide_viewport = True
+                if hasattr(obj, "hide_render"):
+                    obj.hide_render = True
             elif system.role == SystemRole.ANATOMICAL and "muscle_path_point" in site.tags:
                 obj = _make(site.name)
                 obj[ENTITY_KIND_KEY] = MUSCLE_PATH_POINT_KIND
@@ -171,6 +283,10 @@ def import_project_to_scene(
                 obj[MUSCLE_PATH_POINT_SITE_ID_KEY] = site.parent_site_id or ""
                 obj[MUSCLE_PATH_POINT_ORDER_KEY] = order
                 _apply_transform(obj, site.transform)
+                if hasattr(obj, "hide_viewport"):
+                    obj.hide_viewport = True
+                if hasattr(obj, "hide_render"):
+                    obj.hide_render = True
             elif not (system.role != SystemRole.ANATOMICAL and "interface" in site.tags):
                 obj = _make(site.name)
                 obj[ENTITY_KIND_KEY] = ANATOMICAL_SITE_KIND if system.role == SystemRole.ANATOMICAL else DEVICE_FRAME_KIND
@@ -182,6 +298,10 @@ def import_project_to_scene(
                 else:
                     obj[DEVICE_FRAME_LINK_ID_KEY] = site.link_id or ""
                 _apply_transform(obj, site.transform)
+                if hasattr(obj, "hide_viewport"):
+                    obj.hide_viewport = True
+                if hasattr(obj, "hide_render"):
+                    obj.hide_render = True
                 if site.link_id:
                     parent = link_objects.get((system.id, site.link_id))
                     if parent is not None:
@@ -203,6 +323,10 @@ def import_project_to_scene(
                 if "height" in geometry.parameters:
                     obj[MUSCLE_WRAP_HEIGHT_KEY] = geometry.parameters["height"]
                 _apply_transform(obj, geometry.transform)
+                if hasattr(obj, "hide_viewport"):
+                    obj.hide_viewport = True
+                if hasattr(obj, "hide_render"):
+                    obj.hide_render = True
                 if geometry.link_id:
                     parent = link_objects.get((system.id, geometry.link_id))
                     if parent is not None:
@@ -327,6 +451,28 @@ def _apply_transform(obj: Any, transform: Any) -> None:
 
 
 def _set_parent(child: Any, parent: Any) -> None:
+    child.parent = parent
+    # Preserve the child's world transform when parenting.
+    # Without matrix_parent_inverse, Blender reinterprets the child's
+    # local transform in the parent's coordinate space, moving it in world.
+    child_matrix_world = getattr(child, "matrix_world", None)
+    parent_matrix_world = getattr(parent, "matrix_world", None)
+    if child_matrix_world is not None and parent_matrix_world is not None:
+        inverted = getattr(parent_matrix_world, "inverted", None)
+        if callable(inverted):
+            child.matrix_parent_inverse = inverted()
+    children = getattr(parent, "children", None)
+    if isinstance(children, list) and child not in children:
+        children.append(child)
+
+
+def _set_parent_inherit(child: Any, parent: Any) -> None:
+    """Parent child to parent WITHOUT preserving world transform.
+
+    The child inherits the parent's transform directly. Use this when
+    the child's local transform should be interpreted in the parent's
+    coordinate space (e.g. mesh objects positioned at a link's location).
+    """
     child.parent = parent
     children = getattr(parent, "children", None)
     if isinstance(children, list) and child not in children:
