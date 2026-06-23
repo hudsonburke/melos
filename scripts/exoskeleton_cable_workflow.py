@@ -367,15 +367,15 @@ def run_pipeline(*, with_skin: bool = False, output_dir: Path | None = None) -> 
                 # Store skin attachment metadata.
                 from melos.core.common.assets import AssetRecord
                 from melos.core.common.types import AssetRole
-                from melos.core.project.skin import SkinAttachment, SkinAttachmentFit
+                from melos.core.project.attachment import Attachment, AttachmentFit
 
-                skin_fit = SkinAttachmentFit(
+                skin_fit = AttachmentFit(
                     anchor_link_id=anatomical.root_link_id or "sacrum",
                     rest_transform_in_anchor=Transform.identity(),
                     reference_link_ids=[link.id for link in anatomical.links[:4]],
                 )
-                project.skin_attachments.append(
-                    SkinAttachment(
+                project.attachments.append(
+                    Attachment(
                         id="skin_main",
                         name="Human Skin (MHR)",
                         target_system_id=anatomical.id,
@@ -446,7 +446,7 @@ def run_pipeline(*, with_skin: bool = False, output_dir: Path | None = None) -> 
     print(f"  Knee device:       {len(knee_device.links)} links, {len(knee_device.actuators)} actuators")
     print(f"  Elbow device:      {len(elbow_device.links)} links, {len(elbow_device.actuators)} actuators")
     print(f"  Assemblies:        {len(project.assemblies)}")
-    print(f"  Skin attachments:  {len(project.skin_attachments)}")
+    print(f"  Attachments:       {len(project.attachments)}")
     print(f"  Output MJCF:       {mjcf_path}")
     print(f"  Output JSON:       {json_path}")
     print()

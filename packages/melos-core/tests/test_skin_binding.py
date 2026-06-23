@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from melos.core.project.skin_binding import (
+from melos.skin.adapters.skin_binding import (
     build_link_linear_blend_skinning_transforms,
     collapse_joint_weights_to_binding_spec,
     collapse_joint_weights_to_link_weights,

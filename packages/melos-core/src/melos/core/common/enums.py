@@ -61,7 +61,9 @@ class InterfaceKind(StrEnum):
     SOFT_TISSUE_REGION = "soft_tissue_region"
     BONE_ANCHOR_REGION = "bone_anchor_region"
     HAND_GRIP = "hand_grip"
+    SKIN = "skin"
     CUSTOM = "custom"
+
 
 
 class ConnectionKind(StrEnum):

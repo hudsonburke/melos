@@ -28,8 +28,8 @@ from melos.blender.constants import (
 from melos.blender.services.example_alignment import reference_body_tail_dirs
 from melos.core.common.assets import AssetRecord
 from melos.core.common.types import AssetRole, Transform
-from melos.core.project.skin import SkinAttachment, SkinAttachmentFit
-from melos.core.project.skin_binding import collapse_joint_weights_to_binding_spec
+from melos.core.project.attachment import Attachment, AttachmentFit
+from melos.skin.adapters.skin_binding import collapse_joint_weights_to_binding_spec
 from melos.core.system import (
     Actuator,
     ActuatorKind,
@@ -278,7 +278,7 @@ def run_create_example_project(
         else "pelvis"
     )
     if include_skin:
-        skin_fit = SkinAttachmentFit(
+        skin_fit = AttachmentFit(
             anchor_link_id=anchor_link_id,
             rest_transform_in_anchor=Transform.identity(),
             fit_coordinate_values=dict(project.simulation.initial_coordinate_values),
@@ -286,8 +286,8 @@ def run_create_example_project(
             reference_site_ids=[],
             reference_geometry_ids=[],
         )
-        project.skin_attachments.append(
-            SkinAttachment(
+        project.attachments.append(
+            Attachment(
                 id="skin_main",
                 name="Human Skin (myofullbody)",
                 target_system_id=anatomical_system.id
@@ -415,10 +415,10 @@ def run_create_example_project(
                     weight_indptr=skin_bundle["weight_indptr"],
                     binding_spec=binding_spec,
                 )
-                if project.skin_attachments:
-                    skin_attachment = project.skin_attachments[0]
-                    skin_attachment.target_system_id = anatomical_system.id if anatomical_system is not None else display_target_system.id
-                    fit = skin_attachment.fit
+                if project.attachments:
+                    attachment = project.attachments[0]
+                    attachment.target_system_id = anatomical_system.id if anatomical_system is not None else display_target_system.id
+                    fit = attachment.fit
                     fit.anchor_link_id = binding_spec.anchor_link_id or anchor_link_id
                     fit.reference_link_ids = list(binding_spec.reference_link_ids)
                     fit.annotations.clear()

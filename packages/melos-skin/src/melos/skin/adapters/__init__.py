@@ -13,3 +13,4 @@ __all__ = [
     "load_example_skin_reference_bundle",
     "measure_example_skin_segments",
 ]
+from .skin_binding import collapse_joint_weights_to_binding_spec

@@ -59,7 +59,7 @@ def scale_project_to_example_skin(
     )
     scaled_project = fit_result.project
     scaled_project.translation_maps = list(getattr(project, "translation_maps", []))
-    scaled_project.skin_attachments = list(getattr(project, "skin_attachments", []))
+    scaled_project.attachments = list(getattr(project, "attachments", []))
     return scaled_project, body_scale_factors
 
 
@@ -134,7 +134,7 @@ def compute_example_skin_alignment(
     skin_template: Any,
     translation_map: Any | None,
 ) -> SimilarityTransform:
-    _ = getattr(project, "skin_attachments", None)
+    _ = getattr(project, "attachments", None)
     return compute_skin_reference_alignment(world_transforms, skin_template, translation_map)
 
 

@@ -45,7 +45,7 @@ def project_from_dict(data: dict[str, Any]) -> Project:
     data["schema_version"] = CURRENT_SCHEMA_VERSION
     data.setdefault("systems", [])
     data.setdefault("assemblies", [])
-    data.setdefault("skin_attachments", [])
+    data.setdefault("attachments", [])
     return _structure(data, Project)
 
 

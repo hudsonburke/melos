@@ -124,9 +124,9 @@ def validate_topology(project: Project) -> list[ValidationIssue]:
                 )
 
     add_duplicate_issues(
-        [attachment.id for attachment in project.skin_attachments],
-        location="skin_attachments",
-        label="Skin attachment ID",
+        [attachment.id for attachment in project.attachments],
+        location="attachments",
+        label="Attachment ID",
     )
     add_duplicate_issues(
         [observation.id for observation in project.control.observations],

@@ -291,13 +291,13 @@ def validate_references(project: Project) -> list[ValidationIssue]:
     visual_asset_ids = {asset.id for asset in project.assets.items if asset.role == "visual"}
     fitting_asset_ids = {asset.id for asset in project.assets.items if asset.role == "fitting"}
 
-    for attachment in project.skin_attachments:
+    for attachment in project.attachments:
         if attachment.mesh_asset_id not in visual_asset_ids:
             issues.append(
                 ValidationIssue(
                     code="ref.missing",
                     message=f"mesh_asset_id {attachment.mesh_asset_id!r} does not resolve to a 'visual' asset.",
-                    location=f"skin_attachments[{attachment.id}].mesh_asset_id",
+                    location=f"attachments[{attachment.id}].mesh_asset_id",
                 )
             )
         if attachment.binding_asset_id not in fitting_asset_ids:
@@ -305,19 +305,19 @@ def validate_references(project: Project) -> list[ValidationIssue]:
                 ValidationIssue(
                     code="ref.missing",
                     message=f"binding_asset_id {attachment.binding_asset_id!r} does not resolve to a 'fitting' asset.",
-                    location=f"skin_attachments[{attachment.id}].binding_asset_id",
+                    location=f"attachments[{attachment.id}].binding_asset_id",
                 )
             )
         require_exists(
             attachment.target_system_id,
             system_ids,
-            location=f"skin_attachments[{attachment.id}].target_system_id",
+            location=f"attachments[{attachment.id}].target_system_id",
             label="Skin attachment target system",
         )
         require_exists(
             attachment.translation_map_id,
             translation_map_ids,
-            location=f"skin_attachments[{attachment.id}].translation_map_id",
+            location=f"attachments[{attachment.id}].translation_map_id",
             label="Translation map",
         )
         target_link_ids = link_ids_by_system.get(attachment.target_system_id, set())
@@ -326,26 +326,27 @@ def validate_references(project: Project) -> list[ValidationIssue]:
         require_exists(
             attachment.fit.anchor_link_id,
             target_link_ids,
-            location=f"skin_attachments[{attachment.id}].fit.anchor_link_id",
+            location=f"attachments[{attachment.id}].fit.anchor_link_id",
             label="Skin attachment anchor link",
         )
         require_all_exist(
             attachment.fit.reference_link_ids,
             target_link_ids,
-            location=f"skin_attachments[{attachment.id}].fit.reference_link_ids",
+            location=f"attachments[{attachment.id}].fit.reference_link_ids",
             label="Skin attachment reference link",
         )
         require_all_exist(
             attachment.fit.reference_site_ids,
             target_site_ids,
-            location=f"skin_attachments[{attachment.id}].fit.reference_site_ids",
+            location=f"attachments[{attachment.id}].fit.reference_site_ids",
             label="Skin attachment reference site",
         )
         require_all_exist(
             attachment.fit.reference_geometry_ids,
             target_geometry_ids,
-            location=f"skin_attachments[{attachment.id}].fit.reference_geometry_ids",
+            location=f"attachments[{attachment.id}].fit.reference_geometry_ids",
             label="Skin attachment reference geometry",
         )
+
 
     return issues

@@ -5,7 +5,7 @@ from melos.core.io.json import project_from_json, project_to_json
 from melos.core.common.enums import CoordinateKind, JointKind
 from melos.core.common.types import CoordinateDefinition
 from melos.core.project.model import ProjectMeta, Project
-from melos.core.project.skin import SkinAttachment, SkinAttachmentFit
+from melos.core.project.attachment import Attachment, AttachmentFit
 from melos.core.system import (
     Actuator,
     ActuatorKind,
@@ -91,14 +91,15 @@ def test_project_json_roundtrip() -> None:
                 ],
             ),
         ],
-        skin_attachments=[
-            SkinAttachment(
+        attachments=[
+            Attachment(
                 id="skin_main",
                 name="Main Skin",
                 target_system_id="human",
                 mesh_asset_id="skin_mesh",
                 binding_asset_id="skin_binding",
-                fit=SkinAttachmentFit(
+                interface_kind="skin",
+                fit=AttachmentFit(
                     anchor_link_id="pelvis",
                     rest_transform_in_anchor=Transform.identity(),
                     fit_coordinate_values={"hip_flexion": 0.0},
@@ -149,9 +150,9 @@ def test_project_json_roundtrip() -> None:
     assert restored.systems[0].role == SystemRole.ANATOMICAL
     assert restored.systems[0].joints[0].kind == JointKind.REVOLUTE
     assert restored.systems[0].joints[0].coordinates[0].kind == CoordinateKind.ROTATION
-    assert restored.skin_attachments[0].target_system_id == "human"
-    assert restored.skin_attachments[0].fit.anchor_link_id == "pelvis"
-    assert restored.skin_attachments[0].fit.reference_geometry_ids == []
+    assert restored.attachments[0].target_system_id == "human"
+    assert restored.attachments[0].fit.anchor_link_id == "pelvis"
+    assert restored.attachments[0].fit.reference_geometry_ids == []
     assert restored.assemblies[0].connections[0].connection_kind == ConnectionKind.RIGID
     assert restored.assemblies[0].connections[0].constraint_policy == ConstraintPolicy.LOWER_TO_WELD
 

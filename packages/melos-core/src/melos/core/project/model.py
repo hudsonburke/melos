@@ -9,7 +9,7 @@ from melos.core.common.ids import Identifier
 from melos.core.common.types import AnnotationMap
 from melos.core.common.control import ControlInterface
 from melos.core.io.schema import CURRENT_SCHEMA_VERSION
-from melos.core.project.skin import SkinAttachment
+from melos.core.project.attachment import Attachment
 from melos.core.common.simulation import SimulationConfig
 from melos.core.retarget.translation import TranslationMap
 from melos.core.system.model import SystemAssembly, SystemModel
@@ -39,7 +39,7 @@ class Project:
     simulation: SimulationConfig = field(default_factory=SimulationConfig)
     control: ControlInterface = field(default_factory=ControlInterface)
     translation_maps: list[TranslationMap] = field(default_factory=list)
-    skin_attachments: list[SkinAttachment] = field(default_factory=list)
+    attachments: list[Attachment] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-serializable dictionary representation of the project."""
