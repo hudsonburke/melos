@@ -6,13 +6,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, indent, tostring
 
-from melos.core.assets.model import AssetRecord
+from melos.core.common.assets import AssetRecord
 from melos.core.common.types import AssetRole, Bounds, InertialProperties, Transform, Vec3
-from melos.core.control.model import CommandChannel, ObservationChannel
+from melos.core.common.control import CommandChannel, ObservationChannel
 from melos.core.io.json import load_project
-from melos.core.kinematics.model import CoordinateKind, JointKind
+from melos.core.common.enums import CoordinateKind, JointKind
 from melos.core.project.model import Project
-from melos.core.system.enums import ActuatorKind, GeometryRole, RouteNodeKind, SensorKind, SystemRole
+from melos.core.common.enums import ActuatorKind, GeometryRole, RouteNodeKind, SensorKind, SystemRole
 from melos.core.system.model import Actuator, Geometry, Joint, Link, Sensor, Site, SystemModel
 from melos.core.validation import validate_project
 

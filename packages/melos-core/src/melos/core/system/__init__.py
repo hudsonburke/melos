@@ -1,6 +1,6 @@
 """Shared articulated-system model and migration helpers."""
 
-from .enums import (
+from melos.core.common.enums import (
     ActuatorKind,
     ConnectionKind,
     ConstraintPolicy,

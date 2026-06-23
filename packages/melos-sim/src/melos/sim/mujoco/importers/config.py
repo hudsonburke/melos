@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from xml.etree.ElementTree import Element
 
-from melos.core.simulation.model import IntegratorType, SolverType
-from melos.core.simulation.model import SimulationConfig
+from melos.core.common.simulation import IntegratorType, SolverType
+from melos.core.common.simulation import SimulationConfig
 
 from .xml_parser import CompilerDirectives
 from .report import ImportReport

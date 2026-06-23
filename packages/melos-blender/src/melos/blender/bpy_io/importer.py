@@ -4,7 +4,7 @@ import importlib
 from typing import Any, Callable
 
 from melos.core.project.model import Project
-from melos.core.system.enums import ActuatorKind, GeometryRole, SystemRole
+from melos.core.common.enums import ActuatorKind, GeometryRole, SystemRole
 
 from melos.blender.constants import (
     ASSET_ID_KEY,

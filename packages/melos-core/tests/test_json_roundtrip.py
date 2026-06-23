@@ -2,8 +2,8 @@ import json
 
 from melos.core.common.types import Transform
 from melos.core.io.json import project_from_json, project_to_json
-from melos.core.kinematics.model import CoordinateKind, JointKind
-from melos.core.kinematics.model import CoordinateDefinition
+from melos.core.common.enums import CoordinateKind, JointKind
+from melos.core.common.types import CoordinateDefinition
 from melos.core.project.model import ProjectMeta, Project
 from melos.core.project.skin import SkinAttachment, SkinAttachmentFit
 from melos.core.system import (

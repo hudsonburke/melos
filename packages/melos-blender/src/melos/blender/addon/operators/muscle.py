@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 from typing import Any, cast
 
-from melos.core.actuator.muscles.enums import MusclePathPointKind, WrapGeometryKind
+from melos.core.muscles.enums import MusclePathPointKind, WrapGeometryKind
 
 from melos.blender.constants import (
     ENTITY_KIND_KEY,

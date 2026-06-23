@@ -3,15 +3,14 @@ from __future__ import annotations
 import pytest
 
 from melos.core.common.types import InertialProperties, Transform
-from melos.core.contact.model import ContactGeometryKind
-from melos.core.contact.model import ContactGeometry
+from melos.core.common.contact import ContactGeometryKind, ContactGeometry
 from melos.core.scaling.inertials import (
     scale_contact_geometries,
     scale_inertial,
     scale_wrap_geometries,
 )
-from melos.core.actuator.muscles.enums import WrapGeometryKind
-from melos.core.actuator.muscles.wraps import (
+from melos.core.muscles.enums import WrapGeometryKind
+from melos.core.muscles.wraps import (
     CylinderWrapParameters,
     EllipsoidWrapParameters,
     SphereWrapParameters,

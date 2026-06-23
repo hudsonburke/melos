@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from melos.core.actuator.muscles.enums import MusclePathPointKind, WrapGeometryKind
-from melos.core.actuator.muscles.model import MuscleModel, MusclePath, MusclePathPoint
-from melos.core.actuator.muscles.wraps import CylinderWrapParameters, WrapGeometry
+from melos.core.muscles.enums import MusclePathPointKind, WrapGeometryKind
+from melos.core.muscles.model import MuscleModel, MusclePath, MusclePathPoint
+from melos.core.muscles.wraps import CylinderWrapParameters, WrapGeometry
 
 from melos.blender.constants import (
     DISPLAY_NAME_KEY,

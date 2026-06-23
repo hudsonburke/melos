@@ -2,13 +2,13 @@ import json
 from importlib import import_module
 from pathlib import Path
 
-from melos.core.assets.model import AssetLibrary, AssetRecord
+from melos.core.common.assets import AssetLibrary, AssetRecord
 from melos.core.common.types import AssetRole, Transform
-from melos.core.control.model import CommandChannel, ControlInterface, ObservationChannel
-from melos.core.kinematics.model import CoordinateKind, JointKind
-from melos.core.kinematics.model import CoordinateDefinition
+from melos.core.common.control import CommandChannel, ControlInterface, ObservationChannel
+from melos.core.common.enums import CoordinateKind, JointKind
+from melos.core.common.types import CoordinateDefinition
 from melos.core.project.model import ProjectMeta, Project
-from melos.core.simulation.model import SimulationConfig
+from melos.core.common.simulation import SimulationConfig
 from melos.core.system import (
     Actuator,
     ActuatorKind,

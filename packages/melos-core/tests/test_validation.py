@@ -1,6 +1,6 @@
 from melos.core.common.types import Bounds, Transform
-from melos.core.kinematics.model import CoordinateKind, JointKind
-from melos.core.kinematics.model import CoordinateDefinition
+from melos.core.common.enums import CoordinateKind, JointKind
+from melos.core.common.types import CoordinateDefinition
 from melos.core.project.model import Project
 from melos.core.system import (
     Actuator,

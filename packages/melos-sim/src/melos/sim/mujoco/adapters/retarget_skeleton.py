@@ -3,14 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
-from melos.core.kinematics.model import JointKind
+from melos.core.common.enums import JointKind
 from melos.core.retarget.alignment import (
     SimilarityTransform,
     apply_similarity,
     compute_joint_alignment_similarity,
 )
 from melos.core.retarget.model import RetargetBindingSpec
-from melos.core.system.enums import SystemRole
+from melos.core.common.enums import SystemRole
 from melos.core.system.model import Joint, SystemModel
 
 

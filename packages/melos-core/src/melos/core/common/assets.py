@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from melos.core.common.ids import Identifier
-from melos.core.common.types import AnnotationMap, AssetRole
+from .ids import Identifier
+from .types import AnnotationMap, AssetRole
 
 
 @dataclass(slots=True, kw_only=True)

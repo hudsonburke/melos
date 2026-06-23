@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-
-from melos.core.common.ids import Identifier
 from enum import StrEnum
 
-from melos.core.common.types import AnnotationMap, Vec3, Transform, ZERO_VEC3
+from .ids import Identifier
+from .types import AnnotationMap, Vec3, Transform, ZERO_VEC3
 
 
 class ContactGeometryKind(StrEnum):

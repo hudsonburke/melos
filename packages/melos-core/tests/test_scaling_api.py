@@ -3,14 +3,14 @@ from __future__ import annotations
 import pytest
 
 from melos.core.common.types import Transform
-from melos.core.kinematics.model import JointKind
+from melos.core.common.enums import JointKind
 from melos.core.project.model import Project
 from melos.core.retarget.model import SegmentMeasurement, SegmentMeasurementSet
 from melos.core.scaling import (
     compute_segment_scale_factors_from_measurements,
     fit_project_system_to_measurements,
 )
-from melos.core.system.enums import GeometryRole, SystemRole
+from melos.core.common.enums import GeometryRole, SystemRole
 from melos.core.system.model import Geometry, Joint, Link, Site, SystemModel
 
 

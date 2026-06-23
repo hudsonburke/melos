@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from melos.core.common.ids import Identifier
-from melos.core.common.types import AnnotationMap, AssetRole, Vec3
 from enum import StrEnum
 
-from melos.core.common.units import ACCELERATION_UNIT, DEFAULT_GRAVITY
+from .ids import Identifier
+from .types import AnnotationMap, AssetRole, Vec3
+from .units import ACCELERATION_UNIT, DEFAULT_GRAVITY
 
 
 class SolverType(StrEnum):

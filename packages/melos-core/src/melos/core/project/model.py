@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 
-from melos.core.assets.model import AssetLibrary
+from melos.core.common.assets import AssetLibrary
 from melos.core.common.ids import Identifier
 from melos.core.common.types import AnnotationMap
-from melos.core.control.model import ControlInterface
+from melos.core.common.control import ControlInterface
 from melos.core.io.schema import CURRENT_SCHEMA_VERSION
 from melos.core.project.skin import SkinAttachment
-from melos.core.simulation.model import SimulationConfig
+from melos.core.common.simulation import SimulationConfig
 from melos.core.retarget.translation import TranslationMap
 from melos.core.system.model import SystemAssembly, SystemModel
 

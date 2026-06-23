@@ -5,9 +5,9 @@ from types import SimpleNamespace
 from melos.blender.bpy_io.skinned_import import build_armature_object, compute_system_link_world_transforms
 from melos.core.common.types import Transform
 from melos.core.project.model import Project
-from melos.core.system.enums import SystemRole
+from melos.core.common.enums import SystemRole
 from melos.core.system.model import Joint, Link, SystemModel
-from melos.core.kinematics.model import JointKind
+from melos.core.common.enums import JointKind
 
 
 def test_compute_system_link_world_transforms_follows_mjcf_parent_annotations() -> None:

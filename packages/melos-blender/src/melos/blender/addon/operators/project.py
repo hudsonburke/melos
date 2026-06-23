@@ -181,7 +181,7 @@ def _create_muscle_display_objects(
 ) -> list[Any]:
     from melos.core.common.transforms import rotate_vector
     from melos.blender.bpy_io.skinned_import import build_weighted_mesh_object
-    from melos.core.system.enums import ActuatorKind
+    from melos.core.common.enums import ActuatorKind
 
     anatomical_system = project.get_anatomical_system() if hasattr(project, "get_anatomical_system") else None
     if anatomical_system is None:

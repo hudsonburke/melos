@@ -6,9 +6,9 @@ import importlib
 
 from melos.core.common.types import AssetRole
 from melos.core.common.units import DEFAULT_GRAVITY
-from melos.core.kinematics.model import CoordinateKind, JointKind
-from melos.core.actuator.muscles.enums import MusclePathPointKind, WrapGeometryKind
-from melos.core.system.enums import ActuatorKind, RouteNodeKind, SensorKind
+from melos.core.common.enums import CoordinateKind, JointKind
+from melos.core.muscles.enums import MusclePathPointKind, WrapGeometryKind
+from melos.core.common.enums import ActuatorKind, RouteNodeKind, SensorKind
 
 
 def _fallback_property(**_: object) -> None:

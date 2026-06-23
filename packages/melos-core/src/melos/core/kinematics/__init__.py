@@ -1,6 +1,7 @@
 """Shared kinematics concepts for melos core."""
 
-from .model import CoordinateDefinition, CoordinateKind, JointKind
+from melos.core.common.enums import JointKind, CoordinateKind
+from melos.core.common.types import CoordinateDefinition
 
 __all__ = [
     "CoordinateDefinition",

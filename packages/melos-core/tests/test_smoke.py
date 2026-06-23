@@ -2,7 +2,7 @@ from importlib import import_module
 
 from melos.core.common.units import ACCELERATION_UNIT
 from melos.core.project.model import Project
-from melos.core.simulation.model import SimulationConfig
+from melos.core.common.simulation import SimulationConfig
 from melos.core.system import Actuator, ActuatorKind, SystemModel, SystemRole
 from melos.core.validation import validate_project
 

@@ -20,7 +20,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 from melos.core.common.types import Transform
-from melos.core.kinematics.model import CoordinateKind, JointKind
+from melos.core.common.enums import CoordinateKind, JointKind
 from melos.core.project.model import Project
 from melos.core.system import (
     Actuator,
@@ -35,7 +35,7 @@ from melos.core.system import (
     SystemModel,
     SystemRole,
 )
-from melos.core.system.enums import GeometryRole
+from melos.core.common.enums import GeometryRole
 from melos.sim import compile_project
 from melos.sim.mujoco.importers import import_mjcf
 
@@ -365,7 +365,7 @@ def run_pipeline(*, with_skin: bool = False, output_dir: Path | None = None) -> 
                 print(f"       Skin mesh: {len(skin_bundle['vertices'])} vertices, "
                       f"{len(skin_bundle['faces'])} faces")
                 # Store skin attachment metadata.
-                from melos.core.assets.model import AssetRecord
+                from melos.core.common.assets import AssetRecord
                 from melos.core.common.types import AssetRole
                 from melos.core.project.skin import SkinAttachment, SkinAttachmentFit
 

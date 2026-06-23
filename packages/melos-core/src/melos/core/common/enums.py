@@ -1,4 +1,4 @@
-"""Enums for the shared articulated-system model."""
+"""Enums for the shared articulated-system model and kinematic primitives."""
 
 from __future__ import annotations
 
@@ -89,3 +89,24 @@ class RouteNodeKind(StrEnum):
 
     SITE = "site"
     WRAP = "wrap"
+
+
+# Kinematic enums
+class JointKind(StrEnum):
+    """Backend-neutral joint archetypes."""
+
+    FIXED = "fixed"
+    REVOLUTE = "revolute"
+    PRISMATIC = "prismatic"
+    UNIVERSAL = "universal"
+    SPHERICAL = "spherical"
+    PLANAR = "planar"
+    FREE = "free"
+    CUSTOM = "custom"
+
+
+class CoordinateKind(StrEnum):
+    """Type of generalized coordinate associated with a joint."""
+
+    ROTATION = "rotation"
+    TRANSLATION = "translation"

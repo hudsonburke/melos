@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from melos.core.system.enums import ConnectionKind, ConstraintPolicy, InterfaceKind
+from melos.core.common.enums import ConnectionKind, ConstraintPolicy, InterfaceKind
 from melos.core.system.model import AssemblyConnection, AssemblyEndpoint, SystemAssembly
 
 from melos.blender.constants import (

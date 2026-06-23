@@ -5,7 +5,7 @@ from __future__ import annotations
 from xml.etree.ElementTree import Element
 
 from melos.core.common.types import Transform
-from melos.core.system.enums import ActuatorKind
+from melos.core.common.enums import ActuatorKind
 from melos.core.system.model import Actuator, Site
 
 from .bodies import BodyTree

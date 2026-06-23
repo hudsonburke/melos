@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final, TypeAlias
+from .ids import Identifier
+from .enums import CoordinateKind
 
 Vec3: TypeAlias = tuple[float, float, float]
 Quat: TypeAlias = tuple[float, float, float, float]
@@ -60,3 +62,14 @@ class Transform:
         """Return an identity transform."""
 
         return cls()
+@dataclass(slots=True, kw_only=True)
+class CoordinateDefinition:
+    """Named generalized coordinate associated with a joint."""
+
+    id: Identifier
+    name: str
+    kind: CoordinateKind
+    axis: Vec3
+    default_value: float = 0.0
+    limits: Bounds | None = None
+    description: str = ""

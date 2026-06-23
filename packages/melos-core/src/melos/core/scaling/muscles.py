@@ -6,7 +6,7 @@ import math
 
 from melos.core.common.types import Vec3
 from melos.core.scaling.factors import ScaleFactorMap
-from melos.core.actuator.muscles.model import (
+from melos.core.muscles.model import (
     MuscleModel,
     MusclePath,
     MusclePathPoint,

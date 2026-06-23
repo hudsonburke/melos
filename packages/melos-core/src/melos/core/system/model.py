@@ -6,10 +6,9 @@ from dataclasses import dataclass, field
 
 from melos.core.common.ids import Identifier
 from melos.core.common.types import AnnotationMap, Bounds, InertialProperties, Transform
-from melos.core.kinematics.model import JointKind
-from melos.core.kinematics.model import CoordinateDefinition
-
-from .enums import (
+from melos.core.common.enums import JointKind
+from melos.core.common.types import CoordinateDefinition
+from melos.core.common.enums import (
     ActuatorKind,
     ConnectionKind,
     ConstraintPolicy,

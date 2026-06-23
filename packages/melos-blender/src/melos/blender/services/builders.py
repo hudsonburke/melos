@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from melos.core.assets.model import AssetLibrary
-from melos.core.control.model import ControlInterface
+from melos.core.common.assets import AssetLibrary
+from melos.core.common.control import ControlInterface
 from melos.core.project.model import Project, ProjectMeta
-from melos.core.simulation.model import SimulationConfig
-from melos.core.system.enums import SystemRole
+from melos.core.common.simulation import SimulationConfig
+from melos.core.common.enums import SystemRole
 from melos.core.system.model import (
     Actuator,
     Geometry,

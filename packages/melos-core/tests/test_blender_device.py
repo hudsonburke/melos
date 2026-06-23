@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from melos.blender.bpy_io.device import build_device_from_scene
-from melos.core.system.enums import ActuatorKind, SensorKind, SystemRole
-from melos.core.kinematics.model import JointKind
+from melos.core.common.enums import ActuatorKind, SensorKind, SystemRole
+from melos.core.common.enums import JointKind
 
 
 class FakeMatrix:

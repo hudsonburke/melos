@@ -16,7 +16,7 @@ from melos.core.common.transforms import (
 )
 from melos.core.common.types import Transform
 from melos.core.kinematics.pose import evaluate_system_world_transforms
-from melos.core.system.enums import SystemRole
+from melos.core.common.enums import SystemRole
 
 try:
     bpy = importlib.import_module("bpy")
@@ -293,7 +293,7 @@ def _joint_delta(
     coordinates: list[Any],
     coordinate_values: dict[str, float],
 ) -> Transform:
-    from melos.core.kinematics.model import CoordinateKind, JointKind
+    from melos.core.common.enums import CoordinateKind, JointKind
 
     if kind == JointKind.FIXED:
         return Transform.identity()

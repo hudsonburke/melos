@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from melos.blender.bpy_io.muscle import build_muscles_from_scene
-from melos.core.actuator.muscles.enums import MusclePathPointKind, WrapGeometryKind
+from melos.core.muscles.enums import MusclePathPointKind, WrapGeometryKind
 
 
 class FakeMatrix:

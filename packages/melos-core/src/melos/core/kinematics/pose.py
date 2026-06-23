@@ -16,10 +16,10 @@ from melos.core.common.transforms import (
     multiply_quaternions,
 )
 from melos.core.common.types import Quat, Transform, Vec3
-from melos.core.kinematics.model import CoordinateKind, JointKind
+from melos.core.common.enums import CoordinateKind, JointKind
 
 if TYPE_CHECKING:
-    from melos.core.kinematics.model import CoordinateDefinition
+    from melos.core.common.types import CoordinateDefinition
     from melos.core.system.model import SystemModel
 
 

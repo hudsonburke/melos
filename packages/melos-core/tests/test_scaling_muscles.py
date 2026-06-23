@@ -5,8 +5,8 @@ import math
 import pytest
 
 from melos.core.scaling.muscles import scale_muscles
-from melos.core.actuator.muscles.enums import MusclePathPointKind
-from melos.core.actuator.muscles.model import (
+from melos.core.muscles.enums import MusclePathPointKind
+from melos.core.muscles.model import (
     MuscleModel,
     MusclePath,
     MusclePathPoint,

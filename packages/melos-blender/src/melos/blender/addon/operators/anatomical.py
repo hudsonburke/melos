@@ -6,7 +6,7 @@ import importlib
 from typing import Any, cast
 
 from melos.core.common.types import AssetRole
-from melos.core.kinematics.model import CoordinateKind, JointKind
+from melos.core.common.enums import CoordinateKind, JointKind
 
 from melos.blender.constants import (
     ASSET_ID_KEY,

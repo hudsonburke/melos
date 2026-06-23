@@ -6,9 +6,9 @@ from collections.abc import Iterable
 from typing import cast
 
 from melos.core.common.types import Bounds, InertialProperties, Transform
-from melos.core.kinematics.model import CoordinateKind, JointKind
-from melos.core.kinematics.model import CoordinateDefinition
-from melos.core.system.enums import ActuatorKind, GeometryRole, SystemRole
+from melos.core.common.enums import CoordinateKind, JointKind
+from melos.core.common.types import CoordinateDefinition
+from melos.core.common.enums import ActuatorKind, GeometryRole, SystemRole
 from melos.core.system.model import Actuator, Geometry, Joint, Link, Site, SystemModel
 
 from melos.blender.constants import (
