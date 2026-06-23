@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from melos.core.project.model import Project, ProjectMeta
-from melos.core.common.enums import SystemRole
+from melos.core.system.enums import SystemRole
 from melos.core.system.model import SystemModel
 
 from .report import ImportReport, ImportResult

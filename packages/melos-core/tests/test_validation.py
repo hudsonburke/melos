@@ -1,20 +1,17 @@
-from melos.core.common.types import Bounds, Transform
-from melos.core.common.enums import CoordinateKind, JointKind
-from melos.core.common.types import CoordinateDefinition
+from melos.core.system.model import Bounds
+from melos.core.common.types import Transform
+from melos.core.system.enums import CoordinateKind, JointKind
+from melos.core.system.model import CoordinateDefinition
 from melos.core.project.model import Project
+from melos.core.project.enums import ConnectionKind, ConstraintPolicy, InterfaceKind
+from melos.core.project.model import AssemblyConnection, AssemblyEndpoint, SystemAssembly
 from melos.core.system import (
     Actuator,
     ActuatorKind,
-    AssemblyConnection,
-    AssemblyEndpoint,
-    ConnectionKind,
-    ConstraintPolicy,
     CoordinateCoupling,
-    InterfaceKind,
     Joint,
     Link,
     Site,
-    SystemAssembly,
     SystemModel,
     SystemRole,
 )

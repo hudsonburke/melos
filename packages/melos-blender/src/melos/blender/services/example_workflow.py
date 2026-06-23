@@ -26,8 +26,9 @@ from melos.blender.constants import (
     ANATOMICAL_LINK_KIND,
 )
 from melos.blender.services.example_alignment import reference_body_tail_dirs
-from melos.core.common.assets import AssetRecord
-from melos.core.common.types import AssetRole, Transform
+from melos.core.project.assets import AssetRecord
+from melos.core.project.enums import AssetRole
+from melos.core.common.types import Transform
 from melos.core.project.attachment import Attachment, AttachmentFit
 from melos.skin.adapters.skin_binding import collapse_joint_weights_to_binding_spec
 from melos.core.system import (

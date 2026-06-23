@@ -20,7 +20,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 from melos.core.common.types import Transform
-from melos.core.common.enums import CoordinateKind, JointKind
+from melos.core.system.enums import CoordinateKind, JointKind
 from melos.core.project.model import Project
 from melos.core.system import (
     Actuator,
@@ -35,7 +35,7 @@ from melos.core.system import (
     SystemModel,
     SystemRole,
 )
-from melos.core.common.enums import GeometryRole
+from melos.core.system.enums import GeometryRole
 from melos.sim import compile_project
 from melos.sim.mujoco.importers import import_mjcf
 
@@ -303,7 +303,7 @@ def build_elbow_assist_exoskeleton(anatomical: SystemModel) -> SystemModel:
 # ---------------------------------------------------------------------------
 def build_knee_assembly(anatomical_id: str, device_id: str):
     """Create an assembly connecting the knee exo hip anchor to the pelvis."""
-    from melos.core.system import AssemblyConnection, AssemblyEndpoint, SystemAssembly
+    from melos.core.project.model import AssemblyConnection, AssemblyEndpoint, SystemAssembly
 
     connection = AssemblyConnection(
         id="knee_exo_to_pelvis",
@@ -320,7 +320,7 @@ def build_knee_assembly(anatomical_id: str, device_id: str):
 
 def build_elbow_assembly(anatomical_id: str, device_id: str):
     """Create an assembly connecting the elbow exo anchor to the humerus."""
-    from melos.core.system import AssemblyConnection, AssemblyEndpoint, SystemAssembly
+    from melos.core.project.model import AssemblyConnection, AssemblyEndpoint, SystemAssembly
 
     connection = AssemblyConnection(
         id="elbow_exo_to_humerus",
@@ -365,8 +365,8 @@ def run_pipeline(*, with_skin: bool = False, output_dir: Path | None = None) -> 
                 print(f"       Skin mesh: {len(skin_bundle['vertices'])} vertices, "
                       f"{len(skin_bundle['faces'])} faces")
                 # Store skin attachment metadata.
-                from melos.core.common.assets import AssetRecord
-                from melos.core.common.types import AssetRole
+                from melos.core.project.assets import AssetRecord
+                from melos.core.project.enums import AssetRole
                 from melos.core.project.attachment import Attachment, AttachmentFit
 
                 skin_fit = AttachmentFit(

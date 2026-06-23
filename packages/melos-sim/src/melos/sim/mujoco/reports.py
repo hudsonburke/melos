@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from melos.core.common.types import AssetRole
+from melos.core.project.enums import AssetRole
 
 
 @dataclass(slots=True, kw_only=True)

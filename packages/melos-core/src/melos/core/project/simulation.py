@@ -1,9 +1,4 @@
-"""Backend-neutral simulation settings.
-
-The fields in this module define *compiler inputs*, not a full engine-specific
-runtime schema. A backend such as ``melos.sim.mujoco`` is expected to combine these
-preferences with the validated project model to produce backend-native outputs.
-"""
+"""Backend-neutral simulation settings for project-level configuration."""
 
 from __future__ import annotations
 
@@ -11,9 +6,10 @@ from dataclasses import dataclass, field
 
 from enum import StrEnum
 
-from .ids import Identifier
-from .types import AnnotationMap, AssetRole, Vec3
-from .units import ACCELERATION_UNIT, DEFAULT_GRAVITY
+from melos.core.common.ids import Identifier
+from melos.core.project.enums import AssetRole
+from melos.core.common.types import AnnotationMap, Vec3
+from melos.core.common.units import ACCELERATION_UNIT, DEFAULT_GRAVITY
 
 
 class SolverType(StrEnum):

@@ -3,10 +3,11 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import cast
 
-from melos.core.common.types import Bounds
-from melos.core.common.enums import CoordinateKind, JointKind
-from melos.core.common.types import CoordinateDefinition
-from melos.core.common.enums import ActuatorKind, InterfaceKind, RouteNodeKind, SensorKind, SystemRole
+from melos.core.system.model import Bounds
+from melos.core.system.enums import CoordinateKind, JointKind
+from melos.core.system.model import CoordinateDefinition
+from melos.core.system.enums import ActuatorKind, RouteNodeKind, SensorKind, SystemRole
+from melos.core.project.enums import InterfaceKind
 from melos.core.system.model import Actuator, Joint, Link, RouteNode, Sensor, Site, SystemModel
 
 from melos.blender.constants import (

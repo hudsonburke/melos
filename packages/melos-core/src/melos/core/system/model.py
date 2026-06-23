@@ -1,23 +1,63 @@
-"""Shared articulated-system model definitions."""
+"""Intra-system model types for articulated systems.
+
+This module contains types that describe a single articulated system: links,
+sites, joints, geometries, actuators, sensors, routing primitives, and
+coordinate couplings.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 from melos.core.common.ids import Identifier
-from melos.core.common.types import AnnotationMap, Bounds, InertialProperties, Transform
-from melos.core.common.enums import JointKind
-from melos.core.common.types import CoordinateDefinition
-from melos.core.common.enums import (
+from melos.core.common.types import (
+    AnnotationMap,
+    Inertia6,
+    Transform,
+    Vec3,
+)
+
+from .enums import (
     ActuatorKind,
-    ConnectionKind,
-    ConstraintPolicy,
     GeometryRole,
-    InterfaceKind,
     RouteNodeKind,
     SensorKind,
     SystemRole,
+    JointKind,
+    CoordinateKind,
 )
+
+
+@dataclass(slots=True, kw_only=True, frozen=True)
+class Bounds:
+    """Optional lower and upper bounds for scalar values."""
+
+    lower: float | None = None
+    upper: float | None = None
+
+
+@dataclass(slots=True, kw_only=True)
+class InertialProperties:
+    """Inertial properties for a rigid body or rigid link."""
+
+    mass: float | None = field(default=None, metadata={"unit": "kg"})
+    center_of_mass: Vec3 | None = field(default=None, metadata={"unit": "m"})
+    inertia_about_com: Inertia6 | None = field(
+        default=None, metadata={"unit": "kg*m^2"}
+    )
+
+
+@dataclass(slots=True, kw_only=True)
+class CoordinateDefinition:
+    """Named generalized coordinate associated with a joint."""
+
+    id: Identifier
+    name: str
+    kind: CoordinateKind
+    axis: Vec3
+    default_value: float = 0.0
+    limits: Bounds | None = None
+    description: str = ""
 
 
 @dataclass(slots=True, kw_only=True)
@@ -138,21 +178,6 @@ class Sensor:
 
 
 @dataclass(slots=True, kw_only=True)
-class AssemblyEndpoint:
-    """Contextual attachment endpoint referencing one system's native primitives."""
-
-    system_id: Identifier
-    kind: InterfaceKind = InterfaceKind.CUSTOM
-    anchor_link_id: Identifier | None = None
-    reference_link_ids: list[Identifier] = field(default_factory=list)
-    reference_site_ids: list[Identifier] = field(default_factory=list)
-    reference_geometry_ids: list[Identifier] = field(default_factory=list)
-    tags: list[str] = field(default_factory=list)
-    description: str = ""
-    annotations: AnnotationMap = field(default_factory=dict)
-
-
-@dataclass(slots=True, kw_only=True)
 class CoordinateCoupling:
     """Generic coupling between two generalized coordinates."""
 
@@ -163,32 +188,6 @@ class CoordinateCoupling:
     scale: float = 1.0
     offset: float = 0.0
     description: str = ""
-    annotations: AnnotationMap = field(default_factory=dict)
-
-
-@dataclass(slots=True, kw_only=True)
-class AssemblyConnection:
-    """Connection between one or two contextual assembly endpoints."""
-
-    id: Identifier
-    name: str
-    endpoint_a: AssemblyEndpoint
-    endpoint_b: AssemblyEndpoint | None = None
-    relative_transform: Transform = field(default_factory=Transform.identity)
-    connection_kind: ConnectionKind = ConnectionKind.RIGID
-    constraint_policy: ConstraintPolicy | None = None
-    description: str = ""
-    annotations: AnnotationMap = field(default_factory=dict)
-
-
-@dataclass(slots=True, kw_only=True)
-class SystemAssembly:
-    """Interface-centric assembly connecting one or more systems."""
-
-    id: Identifier = "assembly"
-    name: str = "assembly"
-    connections: list[AssemblyConnection] = field(default_factory=list)
-    couplings: list[CoordinateCoupling] = field(default_factory=list)
     annotations: AnnotationMap = field(default_factory=dict)
 
 

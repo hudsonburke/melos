@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from melos.blender.bpy_io.assembly import build_assembly_from_scene
-from melos.core.system.model import SystemAssembly
+from melos.core.project.model import SystemAssembly
 
 
 class FakeMatrix:

@@ -5,8 +5,8 @@ from __future__ import annotations
 import importlib
 from typing import Any, cast
 
-from melos.core.common.types import AssetRole
-from melos.core.common.enums import CoordinateKind, JointKind
+from melos.core.project.enums import AssetRole
+from melos.core.system.enums import CoordinateKind, JointKind
 
 from melos.blender.constants import (
     ASSET_ID_KEY,

@@ -1,12 +1,12 @@
-"""Contact geometry model definitions."""
+"""Contact geometry model definitions for a single system."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from .ids import Identifier
-from .types import AnnotationMap, Vec3, Transform, ZERO_VEC3
+from melos.core.common.ids import Identifier
+from melos.core.common.types import AnnotationMap, Vec3, Transform, ZERO_VEC3
 
 
 class ContactGeometryKind(StrEnum):

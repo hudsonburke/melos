@@ -1,6 +1,6 @@
 """Tests for cable/tendon routing primitives on the shared actuator model."""
 
-from melos.core.common.types import Bounds
+from melos.core.system.model import Bounds
 from melos.core.io.json import project_from_json, project_to_json
 from melos.core.project.model import Project
 from melos.core.system import (

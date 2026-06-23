@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from melos.core.common.types import InertialProperties, Transform, Vec3
-from melos.core.common.contact import ContactGeometry
+from melos.core.system.model import InertialProperties
+from melos.core.common.types import Transform, Vec3
+from melos.core.system.contact import ContactGeometry
 from melos.core.scaling.factors import ScaleFactorMap
 from melos.core.muscles.wraps import (
     CylinderWrapParameters,

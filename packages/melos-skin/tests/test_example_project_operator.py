@@ -26,10 +26,11 @@ from melos.sim.mujoco.adapters import build_example_human_mesh_rigging_plan
 from melos.blender.bpy_io.skin_bundle import SKIN_REFERENCE_COLLECTION, SKIN_REFERENCE_PROP
 from melos.blender.bpy_io.skinned_import import compute_system_link_world_transforms
 from melos.blender.constants import ENTITY_ID_KEY, ENTITY_KIND_KEY, ANATOMICAL_LINK_KIND
-from melos.core.common.assets import AssetRecord
-from melos.core.common.types import AssetRole, Transform
-from melos.core.common.enums import JointKind
-from melos.core.common.enums import SystemRole
+from melos.core.project.assets import AssetRecord
+from melos.core.project.enums import AssetRole
+from melos.core.common.types import Transform
+from melos.core.system.enums import JointKind
+from melos.core.system.enums import SystemRole
 from melos.core.system.model import Joint, Link, SystemModel
 from melos.skin.adapters import build_example_mhr_skin_bundle
 from melos.skin.mappings.myofullbody_to_human_v1 import build_myofullbody_translation_map

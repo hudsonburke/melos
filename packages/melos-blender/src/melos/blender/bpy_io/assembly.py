@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from melos.core.common.enums import ConnectionKind, ConstraintPolicy, InterfaceKind
-from melos.core.system.model import AssemblyConnection, AssemblyEndpoint, SystemAssembly
+from melos.core.project.enums import ConnectionKind, ConstraintPolicy, InterfaceKind
+from melos.core.project.model import AssemblyConnection, AssemblyEndpoint, SystemAssembly
 
 from melos.blender.constants import (
     ATTACHMENT_DEVICE_ID_KEY,

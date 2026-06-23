@@ -6,8 +6,8 @@ import shutil
 from pathlib import Path
 from xml.etree.ElementTree import Element
 
-from melos.core.common.assets import AssetLibrary, AssetRecord
-from melos.core.common.types import AssetRole
+from melos.core.project.assets import AssetLibrary, AssetRecord
+from melos.core.project.enums import AssetRole
 
 from .bodies import _build_quat_annotation
 from .xml_parser import CompilerDirectives

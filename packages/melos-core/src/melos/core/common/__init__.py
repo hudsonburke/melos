@@ -1,7 +1,4 @@
-"""Common low-level primitives shared across the whole project model."""
+"""Shared low-level primitives."""
 from .types import *
-from .enums import *
-from .contact import ContactGeometry, ContactGeometryKind
-from .assets import AssetRecord, AssetLibrary
-from .simulation import SimulationConfig
-from .control import ControlInterface, ObservationChannel, CommandChannel
+from .transforms import *
+from .units import *

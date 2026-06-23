@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from melos.core.common.assets import AssetLibrary, AssetRecord
-from melos.core.common.types import AssetRole
+from melos.core.project.assets import AssetLibrary, AssetRecord
+from melos.core.project.enums import AssetRole
 
 from melos.blender.constants import (
     ASSET_ID_KEY,

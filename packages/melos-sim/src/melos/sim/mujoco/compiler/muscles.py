@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from melos.core.common.enums import GeometryRole
+from melos.core.system.enums import GeometryRole
 from melos.core.system.model import Actuator, Geometry
 
 from ..reports import CompileReport

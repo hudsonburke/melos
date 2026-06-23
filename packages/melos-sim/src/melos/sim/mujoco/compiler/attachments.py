@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from melos.core.common.transforms import compose_transforms, rotate_vector
 from melos.core.common.types import Transform
 from melos.core.project.model import Project
-from melos.core.system.model import AssemblyConnection, AssemblyEndpoint, SystemModel
+from melos.core.project.model import AssemblyConnection, AssemblyEndpoint
+from melos.core.system.model import SystemModel
 
 from ..reports import CompileReport
 

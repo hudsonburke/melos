@@ -3,8 +3,8 @@ from __future__ import annotations
 import importlib
 from typing import Any, cast
 
-from melos.core.common.enums import CoordinateKind, JointKind
-from melos.core.common.enums import ActuatorKind, RouteNodeKind, SensorKind
+from melos.core.system.enums import CoordinateKind, JointKind
+from melos.core.system.enums import ActuatorKind, RouteNodeKind, SensorKind
 
 from melos.blender.constants import (
     CABLE_ACTUATOR_ID_KEY,

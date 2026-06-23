@@ -1,11 +1,11 @@
-"""Control interface and signal models."""
+"""Control interface and signal models for project-level contracts."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .ids import Identifier
-from .types import AnnotationMap
+from melos.core.common.ids import Identifier
+from melos.core.common.types import AnnotationMap
 
 
 @dataclass(slots=True, kw_only=True)

@@ -51,25 +51,21 @@ from melos.blender.constants import (
     ANATOMICAL_SITE_KIND,
     ANATOMICAL_JOINT_KIND,
 )
-from melos.core.common.enums import CoordinateKind, JointKind
-from melos.core.common.types import CoordinateDefinition
+from melos.core.system.enums import CoordinateKind, JointKind
+from melos.core.system.model import CoordinateDefinition
 from melos.core.project.model import ProjectMeta, Project
+from melos.core.project.enums import ConnectionKind, ConstraintPolicy, InterfaceKind
+from melos.core.project.model import AssemblyConnection, AssemblyEndpoint, SystemAssembly
 from melos.core.system import (
     Actuator,
     ActuatorKind,
-    AssemblyConnection,
-    AssemblyEndpoint,
-    ConnectionKind,
-    ConstraintPolicy,
     Geometry,
     GeometryRole,
-    InterfaceKind,
     Joint,
     Link,
     Sensor,
     SensorKind,
     Site,
-    SystemAssembly,
     SystemModel,
     SystemRole,
 )

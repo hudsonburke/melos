@@ -4,17 +4,59 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 
-from melos.core.common.assets import AssetLibrary
+from melos.core.project.assets import AssetLibrary
 from melos.core.common.ids import Identifier
-from melos.core.common.types import AnnotationMap
-from melos.core.common.control import ControlInterface
+from melos.core.common.types import AnnotationMap, Transform
+from melos.core.project.control import ControlInterface
 from melos.core.io.schema import CURRENT_SCHEMA_VERSION
 from melos.core.project.attachment import Attachment
-from melos.core.common.simulation import SimulationConfig
+from melos.core.project.simulation import SimulationConfig
 from melos.core.retarget.translation import TranslationMap
-from melos.core.system.model import SystemAssembly, SystemModel
+from melos.core.system.model import CoordinateCoupling, SystemModel
+from melos.core.project.enums import ConnectionKind, ConstraintPolicy, InterfaceKind
 
 
+@dataclass(slots=True, kw_only=True)
+class AssemblyEndpoint:
+    """Contextual attachment endpoint referencing one system's native primitives."""
+
+    system_id: Identifier
+    kind: InterfaceKind = InterfaceKind.CUSTOM
+    anchor_link_id: Identifier | None = None
+    reference_link_ids: list[Identifier] = field(default_factory=list)
+    reference_site_ids: list[Identifier] = field(default_factory=list)
+    reference_geometry_ids: list[Identifier] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    description: str = ""
+    annotations: AnnotationMap = field(default_factory=dict)
+
+
+@dataclass(slots=True, kw_only=True)
+class AssemblyConnection:
+    """Connection between one or two contextual assembly endpoints."""
+
+    id: Identifier
+    name: str
+    endpoint_a: AssemblyEndpoint
+    endpoint_b: AssemblyEndpoint | None = None
+    relative_transform: Transform = field(default_factory=Transform.identity)
+    connection_kind: ConnectionKind = ConnectionKind.RIGID
+    constraint_policy: ConstraintPolicy | None = None
+    description: str = ""
+    annotations: AnnotationMap = field(default_factory=dict)
+
+
+@dataclass(slots=True, kw_only=True)
+class SystemAssembly:
+    """Interface-centric assembly connecting one or more systems."""
+
+    id: Identifier = "assembly"
+    name: str = "assembly"
+    connections: list[AssemblyConnection] = field(default_factory=list)
+    couplings: list[CoordinateCoupling] = field(default_factory=list)
+    annotations: AnnotationMap = field(default_factory=dict)
+
+ 
 @dataclass(slots=True, kw_only=True)
 class ProjectMeta:
     """Descriptive metadata for a melos project."""

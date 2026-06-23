@@ -1,4 +1,7 @@
-"""Enums for the shared articulated-system model and kinematic primitives."""
+"""System-specific enums extracted from common.enums.
+
+These enums describe roles and kinds used within a single articulated system.
+"""
 
 from __future__ import annotations
 
@@ -50,40 +53,6 @@ class SensorKind(StrEnum):
     MARKER = "marker"
     CUSTOM = "custom"
 
-
-class InterfaceKind(StrEnum):
-    """Semantic interface categories used to connect systems."""
-
-    CUFF = "cuff"
-    FOOTPLATE = "footplate"
-    HARNESS = "harness"
-    SOCKET = "socket"
-    SOFT_TISSUE_REGION = "soft_tissue_region"
-    BONE_ANCHOR_REGION = "bone_anchor_region"
-    HAND_GRIP = "hand_grip"
-    SKIN = "skin"
-    CUSTOM = "custom"
-
-
-
-class ConnectionKind(StrEnum):
-    """Kinds of assembly connections between system interfaces."""
-
-    RIGID = "rigid"
-    COMPLIANT = "compliant"
-    CONTACT_ONLY = "contact_only"
-    OBSERVATIONAL = "observational"
-    ALIGNMENT_ONLY = "alignment_only"
-
-
-class ConstraintPolicy(StrEnum):
-    """Backend-lowering strategy for a connection."""
-
-    LOWER_TO_WELD = "lower_to_weld"
-    LOWER_TO_EQUALITY = "lower_to_equality"
-    LOWER_TO_SPRINGS = "lower_to_springs"
-    LOWER_TO_CONTACTS = "lower_to_contacts"
-    AUTHORING_ONLY = "authoring_only"
 
 
 class RouteNodeKind(StrEnum):

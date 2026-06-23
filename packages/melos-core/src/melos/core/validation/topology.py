@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 
 from melos.core.project.model import Project
-from melos.core.common.enums import ActuatorKind
+from melos.core.system.enums import ActuatorKind
 
 from . import ValidationIssue, ValidationSeverity
 

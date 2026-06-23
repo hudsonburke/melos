@@ -5,10 +5,11 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import cast
 
-from melos.core.common.types import Bounds, InertialProperties, Transform
-from melos.core.common.enums import CoordinateKind, JointKind
-from melos.core.common.types import CoordinateDefinition
-from melos.core.common.enums import ActuatorKind, GeometryRole, SystemRole
+from melos.core.system.model import Bounds, InertialProperties
+from melos.core.common.types import Transform
+from melos.core.system.enums import CoordinateKind, JointKind
+from melos.core.system.model import CoordinateDefinition
+from melos.core.system.enums import ActuatorKind, GeometryRole, SystemRole
 from melos.core.system.model import Actuator, Geometry, Joint, Link, Site, SystemModel
 
 from melos.blender.constants import (

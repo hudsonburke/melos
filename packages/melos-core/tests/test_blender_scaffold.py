@@ -14,7 +14,7 @@ from melos.blender import (
 )
 from melos.blender.bpy_io.assets import build_asset_library_from_scene
 from melos.blender.bpy_io.project import build_project_from_scene
-from melos.core.common.enums import SystemRole
+from melos.core.system.enums import SystemRole
 from melos.core.system.model import Link
 from melos.core.validation import validate_project
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from melos.core.common.enums import InterfaceKind
+from melos.core.project.enums import InterfaceKind
 from melos.core.common.ids import Identifier
 from melos.core.common.types import AnnotationMap, Transform
 
