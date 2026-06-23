@@ -63,6 +63,7 @@ def build_armature_object(
     return arm_obj
 
 
+
 def build_skinned_mesh_with_armature(
     project: Any,
     vertices: list | None = None,
