@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 from typing import Any, Callable
+import numpy as np
 
 from melos.blender.bpy_io.importer import import_project_to_scene
 from melos.blender.bpy_io.skinned_import import (
@@ -61,6 +62,195 @@ from melos.skin.adapters import (
 from melos.skin.mappings.myofullbody_to_human_v1 import (
     build_myofullbody_translation_map,
 )
+
+def _try_extract_pose_inversion_anchors(
+    skin_bundle: dict[str, Any],
+    translation_map: Any,
+    anatomical_system: Any,
+    similarity: Any | None = None,
+) -> dict[str, tuple[float, float, float]] | None:
+    """Attempt to extract reference body anchors via SOMA-X PoseInversion.
+
+    Uses the MHR skin mesh vertices to extract SOMA skeleton joint positions,
+    applies the similarity transform to map them to MuJoCo space, then maps
+    them to MuJoCo link positions via the translation_map.  Returns
+    a dict of {link_id: (x, y, z)} or None if SOMA-X is unavailable.
+    """
+    try:
+        from melos.skin.adapters.pose_inversion import (
+            POSE_INVERSION_AVAILABLE,
+            extract_skeleton_positions_from_mesh,
+        )
+    except ImportError:
+        return None
+
+    if not POSE_INVERSION_AVAILABLE:
+        return None
+
+    try:
+        vertices = np.asarray(skin_bundle["vertices"], dtype=np.float32)
+        identity_coeffs = skin_bundle.get("identity_coeffs", [])
+        scale_params = skin_bundle.get("scale_params", [])
+        data_root = skin_bundle.get("data_root", "")
+        if not data_root:
+            return None
+
+        soma_positions = extract_skeleton_positions_from_mesh(
+            vertices, identity_coeffs, scale_params, data_root,
+        )
+    except Exception:
+        return None
+
+    # Apply similarity transform if available — converts MHR-space
+    # positions to MuJoCo-space positions
+    if similarity is not None:
+        soma_positions = {
+            name: apply_similarity(pos, similarity)
+            for name, pos in soma_positions.items()
+        }
+
+    # Map SOMA joint positions to MuJoCo links via the translation_map
+    anchors: dict[str, tuple[float, float, float]] = {}
+    valid_link_ids = {link.id for link in anatomical_system.links}
+
+    for rule in getattr(translation_map, "rules", ()) or ():
+        source_link_id = getattr(rule, "source_link_id", None)
+        if source_link_id is None or str(source_link_id) not in valid_link_ids:
+            continue
+        link_id = str(source_link_id)
+
+        target_ids = list(getattr(rule, "target_joint_ids", ()) or ())
+        if not target_ids:
+            continue
+        anchor_joint = str(target_ids[0])
+
+        if anchor_joint in soma_positions:
+            anchors[link_id] = soma_positions[anchor_joint]
+
+    return anchors if anchors else None
+
+def _try_optimize_pose(
+    anatomical_system: Any,
+    target_positions: dict[str, tuple[float, float, float]],
+) -> dict[str, float] | None:
+    """Optimize MuJoCo joint angles to match target bone positions.
+
+    Returns optimized coordinate values, or None if optimization fails
+    or scipy is unavailable.
+    """
+    try:
+        from melos.core.kinematics.optimizer import optimize_joint_angles_to_targets
+    except ImportError:
+        return None
+
+    if not target_positions:
+        return None
+
+    try:
+        return optimize_joint_angles_to_targets(
+            anatomical_system,
+            target_positions,
+            max_iterations=200,
+        )
+    except Exception:
+        return None
+
+def _compute_vertex_weighted_targets(
+    vertices: list[list[float]],
+    bone_weights: Any,
+    bone_indices: Any,
+    body_name_map: dict[int, str],
+    anatomical_system: Any,
+) -> dict[str, tuple[float, float, float]]:
+    """Compute per-bone target positions as weighted averages of mesh vertices.
+
+    For each bone/link that has skinning weight influence, computes the
+    weighted centroid of vertices influenced by that bone.  This gives
+    every bone a target position derived from the actual mesh geometry.
+    """
+    import numpy as np
+
+    verts = np.asarray(vertices, dtype=np.float64)
+    n_verts = verts.shape[0]
+
+    if bone_weights is None or bone_indices is None or body_name_map is None:
+        return {}
+
+    link_ids = {link.id for link in anatomical_system.links}
+    link_weight_sum: dict[str, float] = {}
+    link_weighted_pos: dict[str, np.ndarray] = {}
+
+    for vi in range(n_verts):
+        if vi >= len(bone_weights) or vi >= len(bone_indices):
+            continue
+        weights_vi = bone_weights[vi]
+        indices_vi = bone_indices[vi]
+        if not weights_vi or not indices_vi:
+            continue
+        for wi, bi in zip(weights_vi, indices_vi):
+            if wi <= 0:
+                continue
+            link_id = body_name_map.get(bi)
+            if link_id is None or link_id not in link_ids:
+                continue
+            if link_id not in link_weighted_pos:
+                link_weight_sum[link_id] = 0.0
+                link_weighted_pos[link_id] = np.zeros(3, dtype=np.float64)
+            link_weight_sum[link_id] += wi
+            link_weighted_pos[link_id] += wi * verts[vi]
+
+    targets: dict[str, tuple[float, float, float]] = {}
+    for link_id in link_weight_sum:
+        wsum = link_weight_sum[link_id]
+        if wsum > 1e-8:
+            pos = link_weighted_pos[link_id] / wsum
+            targets[link_id] = (float(pos[0]), float(pos[1]), float(pos[2]))
+    return targets
+
+# Wrist/link IDs whose descendants should NOT be optimization targets.
+# These bones are positioned by FK from the wrist, not by direct targeting.
+_WRIST_LINK_IDS: set[str] = set()
+
+def _build_wrist_descendant_filter(anatomical_system: Any) -> set[str]:
+    """Compute link IDs that are descendants of wrist bones (excluded from targets).
+
+    The wrist bones themselves (lunate_*, radius_*, etc.) are kept as targets.
+    Only their children and further descendants (scaphoid, capitate, metacarpals,
+    phalanges) are excluded — these are positioned by FK from the wrist.
+    """
+    # Build child map
+    child_map: dict[str, list[str]] = {}
+    for joint in anatomical_system.joints:
+        child_id = getattr(joint, "child_link_id", None)
+        parent_id = getattr(joint, "parent_link_id", None)
+        if child_id and parent_id:
+            child_map.setdefault(str(parent_id), []).append(str(child_id))
+
+    # Seed BFS from CHILDREN of wrist bones (not the wrist bones themselves)
+    wrist_child_seeds: set[str] = set()
+    for link in anatomical_system.links:
+        is_wrist = any(part in link.id for part in (
+            "lunate", "scaphoid", "pisiform", "triquetrum", "capitate",
+            "trapezium", "trapezoid", "hamate",
+        ))
+        if is_wrist:
+            for child in child_map.get(link.id, []):
+                wrist_child_seeds.add(child)
+        # Also exclude metacarpals and phalanges directly
+        if any(part in link.id for part in ("mc_", "proxph", "midph", "distph")):
+            wrist_child_seeds.add(link.id)
+
+    # BFS to collect all descendants
+    descendants: set[str] = set(wrist_child_seeds)
+    queue = list(wrist_child_seeds)
+    while queue:
+        node = queue.pop(0)
+        for child in child_map.get(node, []):
+            if child not in descendants:
+                descendants.add(child)
+                queue.append(child)
+
+    return descendants
 
 
 
@@ -377,6 +567,18 @@ def run_create_example_project(
                 binding_spec = rigging_plan.binding_spec
                 reference_body_anchors = dict(rigging_plan.reference_body_anchors)
                 reference_body_tail_points = dict(rigging_plan.reference_body_tail_points)
+                # Attempt SOMA-X PoseInversion: extract exact joint positions
+                # from the MHR mesh and use them as reference body anchors.
+                # This replaces the similarity-transformed anchors with
+                # pose-matched positions, fixing misalignment for body parts
+                # where the MuJoCo rest pose differs from the MHR T-pose
+                # (e.g. arms, hands).
+                pose_inv_anchors = _try_extract_pose_inversion_anchors(
+                    skin_bundle, translation_map, anatomical_system,
+                    similarity=rigging_plan.rest_alignment_similarity,
+                )
+                if pose_inv_anchors:
+                    reference_body_anchors.update(pose_inv_anchors)
                 body_mesh_reference_anchors = dict(reference_body_anchors)
                 body_mesh_reference_tail_points = dict(reference_body_tail_points)
                 _extend_reference_body_points_with_hand_joints(
@@ -451,7 +653,46 @@ def run_create_example_project(
                     target_system=anatomical_system,
                 )
                 _interpolate_fallback_anchors(reference_body_anchors, anatomical_system, world_transforms)
-                setup_native_fk_rig(arm_obj, anatomical_system, reference_body_anchors=reference_body_anchors)
+                # Compute vertex-weighted targets from the skin mesh.
+                # These give every bone a target position derived from the
+                # actual mesh geometry — the ground truth for alignment.
+                vertex_targets = _compute_vertex_weighted_targets(
+                    vertices, bone_weights, bone_indices,
+                    body_name_map, anatomical_system,
+                )
+                # Use vertex targets as primary.  Overlay anchor positions
+                # (from skeleton similarity transform) where available —
+                # they're more precise for skeleton-aligned bones.
+                optimization_targets = dict(vertex_targets)
+                optimization_targets.update(reference_body_anchors)
+                # Exclude wrist/hand bone descendants — these are positioned
+                # by FK from the wrist, not by direct targeting.
+                wrist_descendants = _build_wrist_descendant_filter(anatomical_system)
+                for lid in wrist_descendants:
+                    optimization_targets.pop(lid, None)
+                # Optimize MuJoCo joint angles to match target positions.
+                optimized_coords = _try_optimize_pose(
+                    anatomical_system, optimization_targets,
+                )
+                # When optimization succeeds, compute optimized FK positions
+                # and use them as the authoritative bone head positions.
+                # This ensures bones live at the exact FK-computed locations
+                # that best match the mesh.
+                optimized_anchors = reference_body_anchors
+                if optimized_coords:
+                    from melos.core.kinematics.pose import evaluate_system_world_transforms
+                    optimized_wt = evaluate_system_world_transforms(
+                        anatomical_system, optimized_coords,
+                    )
+                    optimized_anchors = {
+                        lid: wt.translation
+                        for lid, wt in optimized_wt.items()
+                    }
+                setup_native_fk_rig(
+                    arm_obj, anatomical_system,
+                    reference_body_anchors=optimized_anchors,
+                    coordinate_values=optimized_coords,
+                )
                 mesh_obj = build_weighted_mesh_object(
                     project,
                     vertices,

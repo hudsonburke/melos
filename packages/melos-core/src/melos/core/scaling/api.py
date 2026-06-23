@@ -97,8 +97,8 @@ def _measurement_dict_and_units(
     measurements: MeasurementInput,
     units: str | None,
 ) -> tuple[dict[str, float], str]:
-    if isinstance(measurements, SegmentMeasurementSet):
-        return measurements.as_dict(), units or measurements.units
+    if hasattr(measurements, "as_dict") and callable(measurements.as_dict):
+        return measurements.as_dict(), units or getattr(measurements, "units", "m")
     return dict(measurements), units or "m"
 
 

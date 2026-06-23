@@ -13,18 +13,15 @@ def setup_native_fk_rig(
     anatomical_system: Any,
     *,
     reference_body_anchors: dict[str, tuple[float, float, float]] | None = None,
+    coordinate_values: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Configure armature for native FK: one bone per link with drivers and constraints.
 
-    Enters edit mode to align bone head/tail/roll to body local frames,
-    then adds Blender drivers and LIMIT_ROTATION constraints on Euler
-    channels for each joint coordinate.
-
     When *reference_body_anchors* is provided, bone head positions are
-    taken from it (similarity-aligned space matching the skin mesh)
-    instead of raw MuJoCo world positions.  The orientation (tail
-    direction and roll) still comes from the MuJoCo FK rotation, which
-    is coordinate-space-invariant for rigid similarity transforms.
+    taken from it instead of raw MuJoCo FK positions.
+
+    When *coordinate_values* is provided, the FK solver uses those joint
+    angles (from pose optimization) instead of the rest pose.
     """
     try:
         bpy = importlib.import_module("bpy")
@@ -34,7 +31,7 @@ def setup_native_fk_rig(
     mathutils = importlib.import_module("mathutils")
     import json as _json
 
-    world_transforms = compute_system_link_world_transforms(anatomical_system)
+    world_transforms = compute_system_link_world_transforms(anatomical_system, coordinate_values=coordinate_values)
     _AXIS_TO_EULER = {
         (1.0, 0.0, 0.0): 0,  # X
         (0.0, 1.0, 0.0): 1,  # Y
