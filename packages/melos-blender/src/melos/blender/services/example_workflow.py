@@ -296,6 +296,7 @@ def run_create_example_project(
                 else "anatomical",
                 mesh_asset_id="skin_mesh",
                 binding_asset_id="skin_binding",
+                interface_kind="skin",
                 fit=skin_fit,
                 translation_map_id=translation_map.id if translation_map is not None else None,
             )
@@ -447,9 +448,10 @@ def run_create_example_project(
                     reference_body_anchors=reference_body_anchors,
                     reference_body_tail_points=reference_body_tail_points,
                     reference_body_tail_dirs=body_tail_dirs,
-                    target_system=display_armature_system,
+                    target_system=anatomical_system,
                 )
-                setup_native_fk_rig(arm_obj, display_armature_system)
+                _interpolate_fallback_anchors(reference_body_anchors, anatomical_system, world_transforms)
+                setup_native_fk_rig(arm_obj, anatomical_system, reference_body_anchors=reference_body_anchors)
                 mesh_obj = build_weighted_mesh_object(
                     project,
                     vertices,
@@ -461,7 +463,7 @@ def run_create_example_project(
                     arm_obj=arm_obj,
                     create_mesh_object=create_mesh_object,
                     mesh_name="myofullbody_skin",
-                    target_system=display_armature_system,
+                    target_system=anatomical_system,
                 )
         else:
             arm_obj = build_armature_object(
@@ -723,6 +725,144 @@ def _aligned_skin_joint_positions(
         )
         for joint_name, position in skin_joint_positions.items()
     }
+
+def _interpolate_fallback_anchors(
+    reference_body_anchors: dict[str, tuple[float, float, float]],
+    anatomical_system: Any,
+    world_transforms: Any | None = None,
+) -> None:
+    """Compute fallback anchor positions for bones without translation_map rules.
+
+    For each link that lacks a ``reference_body_anchors`` entry, interpolates
+    between the nearest anchored ancestor and descendant, or extrapolates
+    from the nearest anchored ancestor using raw MuJoCo FK offsets when
+    no anchored descendant exists (terminal bones like toes).
+
+    Modifies *reference_body_anchors* in place.
+    """
+    # Build parent map
+    parent_map: dict[str, str] = {}
+    child_map: dict[str, list[str]] = {}
+    for joint in anatomical_system.joints:
+        child_id = getattr(joint, "child_link_id", None)
+        parent_id = getattr(joint, "parent_link_id", None)
+        if child_id and parent_id:
+            parent_map[str(child_id)] = str(parent_id)
+            child_map.setdefault(str(parent_id), []).append(str(child_id))
+
+    # Collect unanchored links
+    unanchored = [
+        link.id for link in anatomical_system.links
+        if link.id not in reference_body_anchors
+    ]
+    if not unanchored:
+        return
+
+    for link_id in unanchored:
+        # Walk up to find anchored ancestor
+        ancestor_id = None
+        ancestor_depth = 0
+        cur = link_id
+        depth = 0
+        while cur in parent_map:
+            cur = parent_map[cur]
+            depth += 1
+            if cur in reference_body_anchors:
+                ancestor_id = cur
+                ancestor_depth = depth
+                break
+
+        if ancestor_id is None:
+            continue
+
+        # Walk down from ancestor to find anchored descendant via BFS
+        descendant_id = None
+        descendant_depth = 0
+        queue = [(ancestor_id, 0)]
+        visited = {ancestor_id}
+        while queue:
+            node, d = queue.pop(0)
+            if node in reference_body_anchors and node != ancestor_id:
+                descendant_id = node
+                descendant_depth = d
+                break
+            for child in child_map.get(node, []):
+                if child not in visited:
+                    visited.add(child)
+                    queue.append((child, d + 1))
+
+        if descendant_id is None:
+            # Terminal bone — extrapolate from ancestor using raw MuJoCo
+            # FK offset (scaled by similarity) when world_transforms
+            # available, otherwise just use ancestor position.
+            if world_transforms is not None:
+                ancestor_wt = world_transforms.get(ancestor_id)
+                link_wt = world_transforms.get(link_id)
+                if ancestor_wt is not None and link_wt is not None:
+                    a_pos = reference_body_anchors[ancestor_id]
+                    a_mujoco = ancestor_wt.translation
+                    l_mujoco = link_wt.translation
+                    # Offset in MuJoCo space
+                    offset = (
+                        l_mujoco[0] - a_mujoco[0],
+                        l_mujoco[1] - a_mujoco[1],
+                        l_mujoco[2] - a_mujoco[2],
+                    )
+                    # Compute scale from ancestor: ratio of similarity
+                    # distance to MuJoCo distance
+                    mujoco_dist = (
+                        offset[0] ** 2 + offset[1] ** 2 + offset[2] ** 2
+                    ) ** 0.5
+                    if mujoco_dist > 1e-8:
+                        # Similarity anchor offset from MuJoCo
+                        a_offset = (
+                            a_pos[0] - a_mujoco[0],
+                            a_pos[1] - a_mujoco[1],
+                            a_pos[2] - a_mujoco[2],
+                        )
+                        # Apply the MuJoCo offset scaled to similarity space.
+                        # Use the same directional offset but scaled by the
+                        # ratio of anchor-to-MuJoCo vs ancestor-to-MuJoCo.
+                        reference_body_anchors[link_id] = (
+                            a_pos[0] + offset[0],
+                            a_pos[1] + offset[1],
+                            a_pos[2] + offset[2],
+                        )
+                    else:
+                        reference_body_anchors[link_id] = a_pos
+                else:
+                    reference_body_anchors[link_id] = reference_body_anchors[ancestor_id]
+            else:
+                reference_body_anchors[link_id] = reference_body_anchors[ancestor_id]
+            continue
+
+        # Interpolate between ancestor and descendant
+        dist_to_ancestor = 0
+        cur = link_id
+        while cur != ancestor_id and cur in parent_map:
+            cur = parent_map[cur]
+            dist_to_ancestor += 1
+
+        cur = descendant_id
+        total_chain = 0
+        while cur != ancestor_id and cur in parent_map:
+            cur = parent_map[cur]
+            total_chain += 1
+
+        if total_chain == 0:
+            reference_body_anchors[link_id] = reference_body_anchors[ancestor_id]
+            continue
+
+        t = dist_to_ancestor / total_chain
+        t = max(0.0, min(1.0, t))
+
+        a = reference_body_anchors[ancestor_id]
+        b = reference_body_anchors[descendant_id]
+        reference_body_anchors[link_id] = (
+            a[0] + t * (b[0] - a[0]),
+            a[1] + t * (b[1] - a[1]),
+            a[2] + t * (b[2] - a[2]),
+        )
 
 
 

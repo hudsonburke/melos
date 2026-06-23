@@ -381,6 +381,7 @@ def run_pipeline(*, with_skin: bool = False, output_dir: Path | None = None) -> 
                         target_system_id=anatomical.id,
                         mesh_asset_id="skin_mesh",
                         binding_asset_id="skin_binding",
+                        interface_kind="skin",
                         fit=skin_fit,
                     )
                 )

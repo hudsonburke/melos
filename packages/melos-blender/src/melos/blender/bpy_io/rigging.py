@@ -8,12 +8,23 @@ from melos.blender.bpy_io.skinned_import import compute_system_link_world_transf
 from melos.core.common.transforms import rotate_vector
 
 
-def setup_native_fk_rig(arm_obj: Any, anatomical_system: Any) -> dict[str, Any]:
+def setup_native_fk_rig(
+    arm_obj: Any,
+    anatomical_system: Any,
+    *,
+    reference_body_anchors: dict[str, tuple[float, float, float]] | None = None,
+) -> dict[str, Any]:
     """Configure armature for native FK: one bone per link with drivers and constraints.
 
     Enters edit mode to align bone head/tail/roll to body local frames,
     then adds Blender drivers and LIMIT_ROTATION constraints on Euler
     channels for each joint coordinate.
+
+    When *reference_body_anchors* is provided, bone head positions are
+    taken from it (similarity-aligned space matching the skin mesh)
+    instead of raw MuJoCo world positions.  The orientation (tail
+    direction and roll) still comes from the MuJoCo FK rotation, which
+    is coordinate-space-invariant for rigid similarity transforms.
     """
     try:
         bpy = importlib.import_module("bpy")
@@ -81,7 +92,21 @@ def setup_native_fk_rig(arm_obj: Any, anatomical_system: Any) -> dict[str, Any]:
         bone = edit_bones.get(link.id)
         if bone is None:
             continue
-        pos = wt.translation
+        # Prefer similarity-aligned anchor positions (matching the skin mesh
+        # coordinate space) over raw MuJoCo FK positions.  The anchor
+        # positions are computed by applying the rest_alignment_similarity
+        # to MHR joint positions, so they live in the same space as the
+        # skin mesh vertices.  When no anchor is available, fall back to
+        # the raw MuJoCo FK translation.
+        anchor = (
+            reference_body_anchors.get(link.id)
+            if reference_body_anchors is not None
+            else None
+        )
+        if anchor is not None:
+            pos = anchor
+        else:
+            pos = wt.translation
         rot = wt.rotation
         bone.head = (pos[0], pos[1], pos[2])
         y_dir = mathutils.Quaternion((rot[0], rot[1], rot[2], rot[3])) @ mathutils.Vector((0, 1, 0))
