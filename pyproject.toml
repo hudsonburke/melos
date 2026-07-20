@@ -22,6 +22,7 @@ all = [
     "melos-sim",
     "melos-skin",
     "melos-blender",
+    "melos-rerun",
 ]
 
 [tool.uv.workspace]
@@ -30,6 +31,7 @@ members = [
     "packages/melos-blender",
     "packages/melos-sim",
     "packages/melos-skin",
+    "packages/melos-rerun",
 ]
 
 [tool.uv.sources]
@@ -37,10 +39,12 @@ melos-core = { workspace = true }
 melos-sim = { workspace = true }
 melos-skin = { workspace = true }
 melos-blender = { workspace = true }
+melos-rerun = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = [
     "packages/melos-core/tests",
     "packages/melos-sim",
     "packages/melos-skin/tests",
+    "packages/melos-rerun/tests",
 ]

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "melos-rerun"
+version = "0.1.0"
+description = "Rerun component types and logging adapters for the melos ecosystem"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "rerun-sdk>=0.34",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/melos"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
