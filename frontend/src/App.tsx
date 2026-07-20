@@ -44,11 +44,10 @@ export default function App() {
   return (
     <div className="app-layout">
       <div className="viewport">
-        {loading ? (
-          <div className="loading">Loading model...</div>
-        ) : (
-          <Scene model={model} onSelect={setSelectedPath} selected={selectedPath} />
-        )}
+        {loading
+          ? <div className="loading">Loading model...</div>
+          : <Scene model={model} onSelect={setSelectedPath} selected={selectedPath} apiBase={API_BASE} />
+        }
       </div>
       <div className="sidebar">
         <ControlPanel

@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import {
   OrbitControls,
+  TransformControls,
   Grid,
   Box,
   Line,
@@ -13,11 +14,12 @@ import type { ModelState, SkeletonState, LinkDefinition, LinkTransform } from ".
 
 interface SceneProps {
   model: ModelState | null;
-  onSelect: (entityPath: string) => void;
+  onSelect: (entityPath: string | null) => void;
   selected: string | null;
+  apiBase: string;
 }
 
-export default function Scene({ model, onSelect, selected }: SceneProps) {
+export default function Scene({ model, onSelect: handleSelect, selected, apiBase }: SceneProps) {
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <Canvas
@@ -32,8 +34,9 @@ export default function Scene({ model, onSelect, selected }: SceneProps) {
         {model && (
           <SkeletonRenderer
             skeleton={model.skeleton}
-            onSelect={onSelect}
+            onSelect={handleSelect}
             selected={selected}
+            apiBase={apiBase}
           />
         )}
       </Canvas>
@@ -45,11 +48,12 @@ export default function Scene({ model, onSelect, selected }: SceneProps) {
 
 interface SkeletonRendererProps {
   skeleton: SkeletonState;
-  onSelect: (path: string) => void;
+  onSelect: (path: string | null) => void;
   selected: string | null;
+  apiBase: string;
 }
 
-function SkeletonRenderer({ skeleton, onSelect, selected }: SkeletonRendererProps) {
+function SkeletonRenderer({ skeleton, onSelect, selected, apiBase }: SkeletonRendererProps) {
   const links = skeleton.links;
   const transforms = skeleton.transforms;
   const parentMap = skeleton.parent_map;
@@ -58,7 +62,7 @@ function SkeletonRenderer({ skeleton, onSelect, selected }: SkeletonRendererProp
 
   return (
     <group>
-      {/* Render each link as a box at its world position */}
+      {/* Render each link */}
       {Object.entries(links).map(([name, _link]) => {
         const wt = worldTransforms.get(name);
         if (!wt) return null;
@@ -69,12 +73,13 @@ function SkeletonRenderer({ skeleton, onSelect, selected }: SkeletonRendererProp
             name={name}
             worldTransform={wt}
             isSelected={isSelected}
-            onClick={() => onSelect(name)}
+            onClick={() => onSelect(isSelected ? null : name)}
+            apiBase={apiBase}
           />
         );
       })}
 
-      {/* Render bones (lines between parent and child) */}
+      {/* Render bones */}
       {Object.entries(parentMap).map(([child, parent]) => {
         const childWt = worldTransforms.get(child);
         const parentWt = worldTransforms.get(parent);
@@ -92,43 +97,76 @@ function SkeletonRenderer({ skeleton, onSelect, selected }: SkeletonRendererProp
 
 // ── Bone ────────────────────────────────────────────────────────────────
 
-interface BoneProps {
-  start: THREE.Vector3;
-  end: THREE.Vector3;
-}
-
-function Bone({ start, end }: BoneProps) {
-  const points = [start, end];
+function Bone({ start, end }: { start: THREE.Vector3; end: THREE.Vector3 }) {
   return (
-    <Line
-      points={points}
-      color="#888"
-      lineWidth={1}
-    />
+    <Line points={[start, end]} color="#666" lineWidth={1} />
   );
 }
 
-// ── Link node with click selection ──────────────────────────────────────
+// ── Link node with TransformControls ────────────────────────────────────
 
 interface LinkNodeProps {
   name: string;
   worldTransform: WorldTransform;
   isSelected: boolean;
   onClick: () => void;
+  apiBase: string;
 }
 
-function LinkNode({ name: _name, worldTransform, isSelected, onClick }: LinkNodeProps) {
+function LinkNode({ name, worldTransform, isSelected, onClick, apiBase }: LinkNodeProps) {
   const [hovered, setHovered] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [meshReady, setMeshReady] = useState(false);
+  const meshRef = useRef<THREE.Mesh>(null);
 
-  const color = isSelected ? "#ff6600" : hovered ? "#44aaff" : "#3399ff";
-  const scale = isSelected ? 1.4 : hovered ? 1.2 : 1.0;
+  const color = dragging ? "#ff9900" : isSelected ? "#ff6600" : hovered ? "#44aaff" : "#3399ff";
+  const scale = isSelected ? 1.5 : hovered ? 1.2 : 1.0;
+
+  // On drag end, persist the transform to the backend
+  const handleDragEnd = async () => {
+    setDragging(false);
+    if (!meshRef.current) return;
+
+    const pos = meshRef.current.position;
+    const quat = meshRef.current.quaternion;
+
+    try {
+      const res = await fetch(`${apiBase}/model/skeleton/transforms/${name}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          translation: [pos.x, pos.y, pos.z],
+          rotation: [quat.w, quat.x, quat.y, quat.z],
+        }),
+      });
+      if (!res.ok) {
+        console.warn("Failed to save transform:", res.status);
+      }
+    } catch (e) {
+      console.warn("Failed to save transform:", e);
+    }
+  };
+
+  // Callback ref that triggers re-render once mesh is available
+  const setMeshCallback = (node: THREE.Mesh | null) => {
+    meshRef.current = node;
+    if (node) setMeshReady(true);
+  };
 
   return (
     <group
       position={worldTransform.position}
       quaternion={worldTransform.quaternion}
     >
+      {isSelected && meshReady && (
+        <TransformControls
+          object={meshRef.current!}
+          mode="translate"
+          onMouseUp={handleDragEnd}
+        />
+      )}
       <Box
+        ref={setMeshCallback}
         args={[0.1 * scale, 0.1 * scale, 0.1 * scale]}
         onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
         onPointerOut={() => setHovered(false)}
