@@ -23,6 +23,7 @@ all = [
     "melos-skin",
     "melos-blender",
     "melos-rerun",
+    "melos-backend",
 ]
 
 [tool.uv.workspace]
@@ -32,6 +33,7 @@ members = [
     "packages/melos-sim",
     "packages/melos-skin",
     "packages/melos-rerun",
+    "backend",
 ]
 
 [tool.uv.sources]
@@ -40,6 +42,8 @@ melos-sim = { workspace = true }
 melos-skin = { workspace = true }
 melos-blender = { workspace = true }
 melos-rerun = { workspace = true }
+melos-backend = { workspace = true }
+rerun-importer-osim = { git = "https://github.com/hudsonburke/rerun-importer-osim.git" }
 
 [tool.pytest.ini_options]
 testpaths = [

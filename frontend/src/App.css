@@ -1,0 +1,72 @@
+app-layout {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: row;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.viewport {
+  flex: 1;
+  height: 100vh;
+  position: relative;
+}
+
+.sidebar {
+  width: 320px;
+  height: 100vh;
+  overflow-y: auto;
+  background: #1e1e1e;
+  color: #ccc;
+  border-left: 1px solid #333;
+  padding: 12px;
+  font-family: "Inter", "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+
+.sidebar h2 {
+  color: #fff;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0 0 8px;
+}
+
+.sidebar h3 {
+  color: #aaa;
+  font-size: 12px;
+  margin: 12px 0 4px;
+}
+
+.sidebar .property {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.sidebar .property .label {
+  color: #888;
+}
+
+.sidebar .property .value {
+  color: #ddd;
+  font-family: "Fira Code", monospace;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #888;
+  font-size: 18px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
