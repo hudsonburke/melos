@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
 import {
   OrbitControls,
@@ -17,9 +17,10 @@ interface SceneProps {
   onSelect: (entityPath: string | null) => void;
   selected: string | null;
   apiBase: string;
+  transformMode: "translate" | "rotate";
 }
 
-export default function Scene({ model, onSelect, selected, apiBase }: SceneProps) {
+export default function Scene({ model, onSelect, selected, apiBase, transformMode }: SceneProps) {
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <Canvas
@@ -34,9 +35,10 @@ export default function Scene({ model, onSelect, selected, apiBase }: SceneProps
         {model && (
           <SkeletonRenderer
             skeleton={model.skeleton}
-            onSelect={onSelect}
             selected={selected}
+            onSelect={onSelect}
             apiBase={apiBase}
+            transformMode={transformMode}
           />
         )}
       </Canvas>
@@ -44,118 +46,137 @@ export default function Scene({ model, onSelect, selected, apiBase }: SceneProps
   );
 }
 
-// ── World transforms (iterates topological order: parent before child) ────
+// ── Children map — computed once from parent_map ─────────────────────────
 
-interface WorldTransform {
-  position: THREE.Vector3;
-  quaternion: THREE.Quaternion;
-}
-
-let _cache: { key: string; map: Map<string, WorldTransform> } | null = null;
-
-function computeWorldTransforms(skeleton: SkeletonState): Map<string, WorldTransform> {
-  const key = skeleton.order.join(",");
-  if (_cache && _cache.key === key) return _cache.map;
-
-  const result = new Map<string, WorldTransform>();
-
-  for (const body of skeleton.order) {
-    const xform = skeleton.transforms[body];
-    if (!xform) {
-      result.set(body, { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() });
-      continue;
-    }
-    const pos = new THREE.Vector3(xform.translation[0], xform.translation[1], xform.translation[2]);
-    const quat = new THREE.Quaternion(xform.rotation[1], xform.rotation[2], xform.rotation[3], xform.rotation[0]);
-
-    const parent = skeleton.parent_map[body];
-    if (parent) {
-      const p = result.get(parent);
-      if (p) {
-        pos.applyQuaternion(p.quaternion).add(p.position);
-        quat.multiplyQuaternions(p.quaternion, quat);
-      }
-    }
-    result.set(body, { position: pos, quaternion: quat });
-  }
-
-  _cache = { key, map: result };
-  return result;
+function useChildrenOf(pm: Record<string, string>): Record<string, string[]> {
+  return useMemo(() => {
+    const m: Record<string, string[]> = {};
+    for (const [c, p] of Object.entries(pm)) (m[p] ??= []).push(c);
+    return m;
+  }, [pm]);
 }
 
 // ── Skeleton renderer ────────────────────────────────────────────────────
 
-interface SkeletonRendererProps {
+interface SRProps {
   skeleton: SkeletonState;
-  onSelect: (path: string | null) => void;
   selected: string | null;
+  onSelect: (p: string | null) => void;
   apiBase: string;
+  transformMode: "translate" | "rotate";
 }
 
-function SkeletonRenderer({ skeleton, onSelect, selected, apiBase }: SkeletonRendererProps) {
-  const worldTransforms = computeWorldTransforms(skeleton);
+function SkeletonRenderer({ skeleton, selected, onSelect, apiBase, transformMode }: SRProps) {
+  const childrenOf = useChildrenOf(skeleton.parent_map);
+  const allChildren = useMemo(() => new Set(Object.keys(skeleton.parent_map)), [skeleton.parent_map]);
+  const roots = skeleton.order.filter((n) => !allChildren.has(n));
+
+  // Compute bone positions from parent_map (flat, for Line rendering only)
+  const worldPoses = useMemo(() => computeBonePositions(skeleton), [skeleton]);
 
   return (
     <group>
-      {skeleton.order.map((name) => {
-        const link = skeleton.links[name];
-        if (!link || !link.visible) return null;
-        const wt = worldTransforms.get(name);
-        if (!wt) return null;
-        const isSelected = selected === name;
-        return (
-          <LinkNode
-            key={name}
-            name={name}
-            worldTransform={wt}
-            isSelected={isSelected}
-            onClick={() => onSelect(isSelected ? null : name)}
-            apiBase={apiBase}
-          />
-        );
-      })}
+      {/* Hierarchical scene graph — Three.js handles child propagation */}
+      {roots.map((name) => (
+        <LinkGroup
+          key={name}
+          name={name}
+          skeleton={skeleton}
+          childrenOf={childrenOf}
+          selected={selected}
+          onSelect={onSelect}
+          apiBase={apiBase}
+          transformMode={transformMode}
+        />
+      ))}
+
+      {/* Bones — rendered flat from precomputed world positions */}
       {Object.entries(skeleton.parent_map).map(([child, parent]) => {
-        const c = worldTransforms.get(child);
-        const p = worldTransforms.get(parent);
+        const c = worldPoses.get(child);
+        const p = worldPoses.get(parent);
         if (!c || !p) return null;
-        return <Bone key={`b:${parent}-${child}`} start={p.position} end={c.position} />;
+        return <Line key={`b:${parent}-${child}`} points={[p, c]} color="#666" lineWidth={1} />;
       })}
     </group>
   );
 }
 
-// ── Bone ─────────────────────────────────────────────────────────────────
+// ── Bone position computation (flat, parent-relative → world, minimal) ──
 
-function Bone({ start, end }: { start: THREE.Vector3; end: THREE.Vector3 }) {
-  return <Line points={[start, end]} color="#666" lineWidth={1} />;
+function computeBonePositions(s: SkeletonState): Map<string, THREE.Vector3> {
+  const m = new Map<string, THREE.Vector3>();
+  // Use precomputed order from backend body list (parent-before-child)
+  const order = s.order.length
+    ? s.order
+    : [...new Set([...Object.keys(s.transforms), ...Object.keys(s.parent_map)])];
+  for (const name of order) {
+    const xf = s.transforms[name];
+    const pos = xf
+      ? new THREE.Vector3(xf.translation[0], xf.translation[1], xf.translation[2])
+      : new THREE.Vector3();
+    const q = xf
+      ? new THREE.Quaternion(xf.rotation[1], xf.rotation[2], xf.rotation[3], xf.rotation[0])
+      : new THREE.Quaternion();
+    const pn = s.parent_map[name];
+    if (pn) {
+      const pp = m.get(pn);
+      if (pp) { pos.applyQuaternion(q); pos.add(pp); }
+    }
+    m.set(name, pos);
+  }
+  return m;
 }
 
-// ── Link node with TransformControls ─────────────────────────────────────
+// ── Recursive link group (the actual scene graph) ────────────────────────
 
-interface LinkNodeProps {
+function LinkGroup({
+  name, skeleton, childrenOf, selected, onSelect, apiBase, transformMode,
+}: {
   name: string;
-  worldTransform: WorldTransform;
-  isSelected: boolean;
-  onClick: () => void;
+  skeleton: SkeletonState;
+  childrenOf: Record<string, string[]>;
+  selected: string | null;
+  onSelect: (p: string | null) => void;
   apiBase: string;
-}
-
-function LinkNode({ name, worldTransform, isSelected, onClick, apiBase }: LinkNodeProps) {
+  transformMode: "translate" | "rotate";
+}) {
   const [hovered, setHovered] = useState(false);
   const [meshReady, setMeshReady] = useState(false);
+  const groupRef = useRef<THREE.Group>(null);
   const meshRef = useRef<THREE.Mesh>(null);
+
+  const xf = skeleton.transforms[name];
+  const link = skeleton.links[name];
+  const children = childrenOf[name] || [];
+  const isSelected = selected === name;
+  if (!link?.visible) {
+    // Invisible — still render children but skip the visual
+    return (
+      <group ref={groupRef}>
+        {children.map((c) => (
+          <LinkGroup key={c} name={c} skeleton={skeleton} childrenOf={childrenOf}
+            selected={selected} onSelect={onSelect} apiBase={apiBase}
+            transformMode={transformMode} />
+        ))}
+      </group>
+    );
+  }
 
   const color = isSelected ? "#ff6600" : hovered ? "#44aaff" : "#3399ff";
   const s = isSelected ? 1.5 : hovered ? 1.2 : 1.0;
 
   const handleDragEnd = async () => {
-    if (!meshRef.current) return;
-    const p = meshRef.current.position;
+    if (!groupRef.current) return;
+    const p = groupRef.current.position;
+    const q = groupRef.current.quaternion;
     try {
       await fetch(`${apiBase}/model/skeleton/transforms/${name}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ translation: [p.x, p.y, p.z], rotation: [0, 0, 0, 1] }),
+        body: JSON.stringify({
+          translation: [p.x, p.y, p.z],
+          rotation: [q.w, q.x, q.y, q.z],
+        }),
       });
     } catch (_) {}
   };
@@ -165,20 +186,29 @@ function LinkNode({ name, worldTransform, isSelected, onClick, apiBase }: LinkNo
     if (node) setMeshReady(true);
   };
 
+  // Convert (w, x, y, z) backend quat → Three.js (x, y, z, w)
+  const t = xf?.translation ?? [0, 0, 0];
+  const r = xf?.rotation ?? [1, 0, 0, 0];
+
   return (
-    <group position={worldTransform.position} quaternion={worldTransform.quaternion}>
+    <group ref={groupRef} position={new THREE.Vector3(t[0], t[1], t[2])}
+      quaternion={new THREE.Quaternion(r[1], r[2], r[3], r[0])}>
       {isSelected && meshReady && (
-        <TransformControls object={meshRef.current!} mode="translate" onMouseUp={handleDragEnd} />
+        <TransformControls object={meshRef.current!} mode={transformMode}
+          onMouseUp={handleDragEnd} />
       )}
-      <Box
-        ref={refCb}
-        args={[0.1 * s, 0.1 * s, 0.1 * s]}
+      <Box ref={refCb} args={[0.08 * s, 0.08 * s, 0.08 * s]}
         onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
         onPointerOut={() => setHovered(false)}
-        onClick={(e) => { e.stopPropagation(); onClick(); }}
-      >
+        onClick={(e) => { e.stopPropagation(); onSelect(isSelected ? null : name); }}>
         <meshStandardMaterial color={color} transparent opacity={0.85} />
       </Box>
+
+      {children.map((c) => (
+        <LinkGroup key={c} name={c} skeleton={skeleton} childrenOf={childrenOf}
+          selected={selected} onSelect={onSelect} apiBase={apiBase}
+          transformMode={transformMode} />
+      ))}
     </group>
   );
 }

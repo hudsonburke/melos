@@ -8,6 +8,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8008";
 export default function App() {
   const [model, setModel] = useState<ModelState | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [transformMode, setTransformMode] = useState<"translate" | "rotate">("translate");
   const [loading, setLoading] = useState(true);
 
   // Load model from the Python backend
@@ -46,7 +47,8 @@ export default function App() {
       <div className="viewport">
         {loading
           ? <div className="loading">Loading model...</div>
-          : <Scene model={model} onSelect={setSelectedPath} selected={selectedPath} apiBase={API_BASE} />
+          : <Scene model={model} onSelect={setSelectedPath} selected={selectedPath}
+            apiBase={API_BASE} transformMode={transformMode} />
         }
       </div>
       <div className="sidebar">
@@ -54,6 +56,8 @@ export default function App() {
           model={model}
           selectedPath={selectedPath}
           apiBase={API_BASE}
+          transformMode={transformMode}
+          onModeChange={setTransformMode}
         />
       </div>
     </div>

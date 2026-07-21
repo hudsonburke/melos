@@ -4,9 +4,11 @@ interface Props {
   model: ModelState | null;
   selectedPath: string | null;
   apiBase: string;
+  transformMode: "translate" | "rotate";
+  onModeChange: (m: "translate" | "rotate") => void;
 }
 
-export default function ControlPanel({ model, selectedPath, apiBase }: Props) {
+export default function ControlPanel({ model, selectedPath, apiBase, transformMode, onModeChange }: Props) {
   if (!model) {
     return (
       <aside className="sidebar">
@@ -37,9 +39,29 @@ export default function ControlPanel({ model, selectedPath, apiBase }: Props) {
         <span className="label">Links</span>
         <span className="value">{Object.keys(skeleton.links).length}</span>
       </div>
-      <div className="property">
-        <span className="label">Backend</span>
-        <span className="value" style={{ fontSize: 11 }}>{apiBase}</span>
+
+      {/* Transform mode toggle */}
+      <h3>Transform</h3>
+      <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+        {(["translate", "rotate"] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => onModeChange(mode)}
+            style={{
+              flex: 1,
+              padding: "4px 8px",
+              background: transformMode === mode ? "#ff6600" : "#333",
+              color: "#fff",
+              border: "1px solid #555",
+              borderRadius: 4,
+              cursor: "pointer",
+              fontSize: 12,
+              textTransform: "capitalize",
+            }}
+          >
+            {mode === "translate" ? "↕ Move" : "↻ Rotate"}
+          </button>
+        ))}
       </div>
 
       {/* Selected entity details */}
