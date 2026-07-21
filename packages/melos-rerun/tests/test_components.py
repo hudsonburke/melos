@@ -118,6 +118,7 @@ class TestMuscleDefinitionBatch:
     def test_basic(self) -> None:
         data = [{
             "name": "biceps",
+            "muscle_model": "hill",
             "site_ids": ["origin", "midpoint", "insertion"],
             "max_force": 2000.0,
             "optimal_fiber_length": 0.08,
@@ -126,6 +127,7 @@ class TestMuscleDefinitionBatch:
         }]
         arr = MuscleDefinitionBatch(data).as_arrow_array()
         assert arr[0]["name"].as_py() == "biceps"
+        assert arr[0]["muscle_model"].as_py() == "hill"
         assert arr[0]["site_ids"].as_py() == ["origin", "midpoint", "insertion"]
 
 

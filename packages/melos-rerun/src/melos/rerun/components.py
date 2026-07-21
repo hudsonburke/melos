@@ -63,14 +63,22 @@ BODY_MEASUREMENTS = pa.struct([
 
 # ── MuscleDefinition ──────────────────────────────────────────────────────
 # A muscle path with via-point sites and physiological params.
-# Used by: OSIM importer, Melos editor, MuJoCo compiler.
+#
+# ``muscle_model`` discriminates the type of muscle model:
+#   "hill" — Hill-type (default): max_force, optimal_fiber_length,
+#            tendon_slack_length, pennation_angle.
+#   Future values: "volumetric" (MRI-based 3D), "fem" (finite element),
+#   "smpl" (SMPL-style body mesh), etc. may add different parameter fields.
+#
+# Used by: OSIM importer, Melos editor, MuJoCo compiler (hill → <muscle>).
 MUSCLE_DEFINITION = pa.struct([
     ("name", pa.utf8()),
-    ("site_ids", pa.list_(pa.utf8())),
-    ("max_force", pa.float32()),
-    ("optimal_fiber_length", pa.float32()),
-    ("tendon_slack_length", pa.float32()),
-    ("pennation_angle", pa.float32()),
+    ("muscle_model", pa.utf8()),                    # "hill", "volumetric", etc.
+    ("site_ids", pa.list_(pa.utf8())),               # via-point path
+    ("max_force", pa.float32()),                     # Hill-type: max isometric force (N)
+    ("optimal_fiber_length", pa.float32()),           # Hill-type: optimal fiber length (m)
+    ("tendon_slack_length", pa.float32()),            # Hill-type: tendon slack length (m)
+    ("pennation_angle", pa.float32()),                # Hill-type: pennation angle (rad)
 ])
 
 # ── ActuatorDefinition ────────────────────────────────────────────────────
@@ -174,7 +182,14 @@ class BodyMeasurementsBatch(rr.ComponentBatchMixin):
 
 
 class MuscleDefinitionBatch(rr.ComponentBatchMixin):
-    """A muscle path definition with via-point sites and physiology."""
+    """A muscle path definition with via-point sites and physiology.
+
+    ``muscle_model`` discriminates the type:
+    - ``"hill"`` — Hill-type muscle with max_force, optimal_fiber_length,
+      tendon_slack_length, pennation_angle (maps to MuJoCo ``<muscle>``).
+    - Future types (``"volumetric"``, ``"fem"``, etc.) define their own
+      parameter fields.
+    """
 
     _ARROW_TYPE = MUSCLE_DEFINITION
 
@@ -187,6 +202,11 @@ class MuscleDefinitionBatch(rr.ComponentBatchMixin):
 
 class ActuatorDefinitionBatch(rr.ComponentBatchMixin):
     """An actuator (motor, muscle-equivalent, torque source) on a joint.
+
+    ``actuator_type`` values:
+    - ``"motor"`` — ideal torque/force source (MuJoCo ``<motor>``)
+    - ``"muscle_hill"`` — Hill-type muscle actuator
+    - ``"torque"`` — joint-level torque source
 
     Used by the MuJoCo compiler to generate actuator elements in MJCF.
     """
