@@ -132,10 +132,20 @@ def load_model_from_osim(osim_path: str, prefix: str = "") -> ModelState:
         rotation=(1.0, 0.0, 0.0, 0.0),
     )
 
+    # Build location/orientation map from joint data (stored per-joint, not per-body)
+    joint_location: dict[str, list[float]] = {}
+    joint_orientation: dict[str, list[float]] = {}
+    for j in raw.get("joints", []):
+        child = j.get("child", "")
+        if "location" in j:
+            joint_location[child] = j["location"]
+        if "orientation" in j:
+            joint_orientation[child] = j.get("orientation", [0.0, 0.0, 0.0])
+
     for b in raw.get("bodies", []):
         name = b["name"]
-        loc = b.get("location", [0.0, 0.0, 0.0])
-        orient = b.get("orientation", [0.0, 0.0, 0.0])
+        loc = joint_location.get(name, b.get("location", [0.0, 0.0, 0.0]))
+        orient = joint_orientation.get(name, b.get("orientation", [0.0, 0.0, 0.0]))
         # Convert Euler XYZ to quaternion (w, x, y, z)
         q = _euler_to_quat(*orient)
         transforms[name] = LinkTransform(
@@ -247,3 +257,68 @@ def patch_transform(link_name: str, patch: TransformPatch) -> LinkTransform:
     if patch.rotation is not None:
         xform.rotation = patch.rotation
     return xform
+
+
+# ── Scaling endpoint ──────────────────────────────────────────────────────
+
+
+from pydantic import BaseModel
+
+
+class ScaleByLengthsRequest(BaseModel):
+    target_lengths: dict[str, float]
+    segment_to_link: dict[str, str | list[str]]
+    target_mass: float | None = None
+
+
+class ScaleByVectorsRequest(BaseModel):
+    target_vectors: dict[str, list[float]]
+    joint_to_link: dict[str, str]
+    target_mass: float | None = None
+
+
+from melos.backend.scaling import by_segment_lengths, by_bone_vectors
+
+
+@app.post("/model/scale/lengths")
+def scale_by_lengths(req: ScaleByLengthsRequest) -> dict:
+    """Scale the loaded model using segment-length ratios."""
+    if _model is None:
+        raise HTTPException(404, "No model loaded.")
+    report = by_segment_lengths(
+        _model.skeleton,
+        req.target_lengths,
+        req.segment_to_link,
+        target_mass=req.target_mass,
+    )
+    _model.skeleton = report.scaled_skeleton
+    return {
+        "link_scale_factors": report.link_scale_factors,
+        "matched_segments": report.matched_segments,
+        "unmatched_segments": report.unmatched_segments,
+        "total_mass_before": report.total_mass_before,
+        "total_mass_after": report.total_mass_after,
+        "warnings": report.warnings,
+    }
+
+
+@app.post("/model/scale/vectors")
+def scale_by_vectors(req: ScaleByVectorsRequest) -> dict:
+    """Scale the loaded model using 3D bone vectors (MHR/SOMA skeleton fit)."""
+    if _model is None:
+        raise HTTPException(404, "No model loaded.")
+    report = by_bone_vectors(
+        _model.skeleton,
+        {k: tuple(v) for k, v in req.target_vectors.items()},
+        req.joint_to_link,
+        target_mass=req.target_mass,
+    )
+    _model.skeleton = report.scaled_skeleton
+    return {
+        "link_scale_factors": report.link_scale_factors,
+        "matched_segments": report.matched_segments,
+        "unmatched_segments": report.unmatched_segments,
+        "total_mass_before": report.total_mass_before,
+        "total_mass_after": report.total_mass_after,
+        "warnings": report.warnings,
+    }
