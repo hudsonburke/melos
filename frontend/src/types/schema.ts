@@ -38,6 +38,8 @@ export interface SkeletonState {
   links: Record<string, LinkDefinition>;
   transforms: Record<string, LinkTransform>;
   parent_map: Record<string, string>; // child_name -> parent_name
+  order: string[];                     // parent-before-child topological order
+  descendants: Record<string, string[]>; // parent -> [child, grandchild, ...]
 }
 
 /** Subject measurements */

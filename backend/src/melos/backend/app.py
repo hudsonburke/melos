@@ -83,6 +83,49 @@ def load_model_from_osim(osim_path: str, prefix: str = "") -> ModelState:
         if child and parent:
             parent_map[child] = parent
 
+    # ── Topological order & descendants ──────────────────────────────
+    all_bodies = set()
+    for name in links:
+        all_bodies.add(name)
+    for name in parent_map:
+        all_bodies.add(name)
+    # Ensure ground is always in the body set (used as root transform)
+    if "ground" not in all_bodies:
+        all_bodies.add("ground")
+
+    children_of: dict[str, list[str]] = {}
+    for child, parent in parent_map.items():
+        children_of.setdefault(parent, []).append(child)
+
+    order: list[str] = []
+    visited: set[str] = set()
+    roots = [b for b in all_bodies if b not in parent_map or parent_map.get(b) == "ground"]
+
+    def topo_dfs(body: str) -> None:
+        if body in visited:
+            return
+        visited.add(body)
+        order.append(body)
+        for child in children_of.get(body, []):
+            topo_dfs(child)
+
+    for root in sorted(roots):
+        topo_dfs(root)
+
+    # Add any unvisited bodies (orphans)
+    for b in sorted(all_bodies):
+        if b not in visited:
+            order.append(b)
+
+    # Descendants: for each body, collect all bodies in its subtree
+    descendants: dict[str, list[str]] = {}
+    # Process in reverse topological order so children are already computed
+    for body in reversed(order):
+        body_desc: set[str] = {body}
+        for child in children_of.get(body, []):
+            body_desc.update(descendants.get(child, {child}))
+        descendants[body] = sorted(body_desc)
+
     # Default ground transform
     transforms["ground"] = LinkTransform(
         translation=(0.0, 0.0, 0.0),
@@ -113,6 +156,8 @@ def load_model_from_osim(osim_path: str, prefix: str = "") -> ModelState:
             links=links,
             transforms=transforms,
             parent_map=parent_map,
+            order=order,
+            descendants=descendants,
         ),
     )
 

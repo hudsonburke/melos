@@ -118,6 +118,14 @@ function createDemoModel(): ModelState {
         tibia_r: "femur_r",
         talus_r: "tibia_r",
       },
+      order: ["ground", "pelvis", "femur_r", "tibia_r", "talus_r"],
+      descendants: {
+        ground: ["ground", "pelvis", "femur_r", "tibia_r", "talus_r"],
+        pelvis: ["pelvis", "femur_r", "tibia_r", "talus_r"],
+        femur_r: ["femur_r", "tibia_r", "talus_r"],
+        tibia_r: ["tibia_r", "talus_r"],
+        talus_r: ["talus_r"],
+      },
     },
   };
 }

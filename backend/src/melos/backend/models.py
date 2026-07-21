@@ -38,10 +38,21 @@ class LinkTransform(BaseModel):
 
 
 class SkeletonState(BaseModel):
+    """The full articulated skeleton state with topological ordering.
+
+    ``order`` contains body names in parent-before-child topological order,
+    simplifying forward-kinematics computation in the frontend.
+
+    ``descendants`` maps each body name to the list of bodies in its
+    kinematic subtree (including the body itself), enabling skeleton-wide
+    transforms when a parent is moved.
+    """
     joints: dict[str, JointDef]
     links: dict[str, LinkDef]
     transforms: dict[str, LinkTransform]
-    parent_map: dict[str, str]
+    parent_map: dict[str, str]       # child_name -> parent_name
+    order: list[str] = []            # parent-before-child topological order
+    descendants: dict[str, list[str]] = {}  # parent -> [child, grandchild, ...]
 
 
 class ModelState(BaseModel):
