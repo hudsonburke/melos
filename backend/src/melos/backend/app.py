@@ -544,3 +544,43 @@ def get_skin_bundle() -> dict:
         "n_verts": len(bundle["vertices"]),
         "n_faces": len(bundle["faces"]),
     }
+
+
+# ── Assembly descriptor endpoints ─────────────────────────────────────────
+
+
+@app.get("/model/assemblies")
+def list_assemblies() -> dict:
+    """List available exoskeleton assembly descriptors."""
+    from melos.backend.assembly import list_assembly_descriptors
+    from pathlib import Path
+    desc_dir = Path("backend/src/melos/backend/descriptors")
+    return {"assemblies": list_assembly_descriptors(desc_dir)}
+
+
+@app.get("/model/assembly/{name}")
+def resolve_assembly(name: str) -> dict:
+    """Resolve an exoskeleton assembly against the current skeleton landmarks."""
+    from melos.backend.assembly import load_assembly_descriptor, resolve_assembly
+    from melos.backend.landmarks import landmark_world_positions
+    from pathlib import Path
+
+    if _model is None:
+        raise HTTPException(404, "No model loaded.")
+
+    desc_path = Path(f"backend/src/melos/backend/descriptors/{name}.yaml")
+    if not desc_path.exists():
+        raise HTTPException(404, f"Assembly descriptor '{name}' not found")
+
+    descriptor = load_assembly_descriptor(desc_path)
+    lm_pos = landmark_world_positions(_model.skeleton)
+    lm_defs = {}
+    from melos.backend.marker_sets import builtin_marker_sets_dir, load_marker_set
+    ms_path = builtin_marker_sets_dir() / "gait_full_body.yaml"
+    if ms_path.exists():
+        ms = load_marker_set(ms_path)
+        for k, v in ms.get("landmarks", {}).items():
+            lm_defs[k] = v.get("melos", {})
+
+    resolved = resolve_assembly(descriptor, lm_pos, lm_defs)
+    return {"name": resolved["name"], "parts": resolved["parts"]}

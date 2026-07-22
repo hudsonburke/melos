@@ -1,0 +1,39 @@
+name: "right_arm_brace_v1"
+description: >
+  Right arm exoskeleton brace assembly. Upper arm cuff attaches at the
+  RUA1 and RUA3 landmarks (upper arm markers), forearm cuff attaches at
+  RFASup and RStyloid. Both cuffs are sized from the subject's limb
+  circumference derived from the landmark pair distances.
+version: "1.0"
+parts:
+  - type: "Cuff"
+    id: "upper_arm_cuff_r"
+    description: "Right upper arm cuff"
+    parameters:
+      coverage: 0.75
+      wall_thickness: 3.0
+      padding_thickness: 2.0
+      width: 40.0
+    attachments:
+      - { landmark: "RUA1", role: "proximal" }
+      - { landmark: "RUA3", role: "distal" }
+    subject_measurements:
+      - segment: "upper_arm_length_r"
+        source: "landmark_distance"
+        landmarks: ["RUA1", "RUA3"]
+
+  - type: "Cuff"
+    id: "forearm_cuff_r"
+    description: "Right forearm cuff"
+    parameters:
+      coverage: 0.7
+      wall_thickness: 2.5
+      padding_thickness: 2.0
+      width: 35.0
+    attachments:
+      - { landmark: "RFASup", role: "proximal" }
+      - { landmark: "RStyloid", role: "distal" }
+    subject_measurements:
+      - segment: "forearm_length_r"
+        source: "landmark_distance"
+        landmarks: ["RFASup", "RStyloid"]
