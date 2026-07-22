@@ -31,18 +31,23 @@ def apply_assembly_to_skeleton(
     resolved: dict[str, Any],
     *,
     exo_parent: str = "ground",
-) -> SkeletonState:
+    landmark_positions: dict[str, tuple[float, float, float]] | None = None,
+) -> tuple[SkeletonState, list[dict[str, Any]]]:
     """Add exoskeleton parts from a resolved assembly spec to a skeleton.
+
+    Returns ``(modified_skeleton, cable_definitions)`` where
+    ``cable_definitions`` is a list of dicts ready for the MJCF compiler.
 
     Args:
         skeleton: The base skeleton to extend.
-        resolved: Output from ``resolve_assembly()`` with ``parts`` list.
+        resolved: Output from ``resolve_assembly()`` with ``parts`` list
+            and optional ``cables`` list.
         exo_parent: Which body to parent all exoskeleton parts under.
-            Defaults to "ground" so exo parts are at the top level.
+        landmark_positions: World-space landmark positions, needed to
+            resolve cable via-points that reference landmarks.
 
     Returns:
-        A new ``SkeletonState`` with exoskeleton bodies, joints, and
-        cable metadata added.  The original skeleton is not modified.
+        Tuple of (modified SkeletonState, cable list for compiler).
     """
     # Deep copy so we don't mutate the original
     sk = copy.deepcopy(skeleton)
@@ -130,26 +135,65 @@ def apply_assembly_to_skeleton(
             else:
                 order.append(part_id)
 
-        # Process cable ports as via-point sites (metadata for the compiler)
-        cable_ports = part.get("cable_ports", [])
-        if cable_ports:
-            # Store port info as landmarks-like metadata on the part body
-            port_info = []
-            for port in cable_ports:
-                port_pos = port.get("position", [0, 0, 0])
-                port_info.append({
-                    "id": port.get("id", ""),
-                    "type": port.get("type", "via"),
-                    "position": port_pos,
-                })
-            # Store as a simple string-encoded metadata on the link
-            # (the compiler will read this to generate MuJoCo sites/tendons)
-            port_str = ";".join(
-                f"{p['id']}|{p['type']}|{p['position'][0]},{p['position'][1]},{p['position'][2]}"
-                for p in port_info
-            )
-            if port_str:
-                sk.links[part_id].graphics_file = port_str
+        # ── Resolve cable definitions ────────────────────────────────────
+    cable_defs: list[dict[str, Any]] = []
+    for cable in resolved.get("cables", []):
+        via_points: list[dict[str, Any]] = []
+        for step in cable.get("path", []):
+            port_ref = step.get("port", "")
+            landmark_name = step.get("landmark", "")
+
+            if port_ref:
+                # Format: "part_id/port_id"
+                parts = port_ref.split("/", 1)
+                part_id = parts[0]
+                port_id = parts[1] if len(parts) > 1 else ""
+                # Find the port on the resolved part and get its body name
+                for rp in resolved.get("parts", []):
+                    if rp["id"] == part_id:
+                        # Get the part's body name (from applied skeleton)
+                        body = part_id  # same as body id
+                        for cp in rp.get("cable_ports", []):
+                            if cp["id"] == port_id:
+                                pos = cp["position"]
+                                via_points.append({
+                                    "body": body,
+                                    "pos": tuple(pos),
+                                    "type": cp.get("type", "via"),
+                                })
+                                break
+                        break
+
+            elif landmark_name and landmark_positions:
+                # Via at a landmark — attach to the landmark's link
+                lpos = landmark_positions.get(landmark_name)
+                if lpos:
+                    # Find which link this landmark is on
+                    from melos.backend.marker_sets import builtin_marker_sets_dir, load_marker_set
+                    ms_path = builtin_marker_sets_dir() / "gait_full_body.yaml"
+                    link_name = "ground"
+                    offset = [0, 0, 0]
+                    if ms_path.exists():
+                        ms = load_marker_set(ms_path)
+                        lm_entry = ms.get("landmarks", {}).get(landmark_name, {})
+                        melos_info = lm_entry.get("melos", {})
+                        link_name = melos_info.get("link", "ground")
+                        offset = melos_info.get("offset", [0, 0, 0])
+                    via_points.append({
+                        "body": link_name,
+                        "pos": tuple(offset),
+                        "type": "via",
+                        "wrap_radius": step.get("wrap_radius", 0),
+                    })
+
+        if via_points:
+            cable_defs.append({
+                "id": cable.get("id", f"cable_{len(cable_defs)}"),
+                "spring_length": cable.get("spring_length", 0.3),
+                "diameter": cable.get("diameter", 0.002),
+                "max_force": cable.get("max_force", 500.0),
+                "via_points": via_points,
+            })
 
     # Recompute descendants
     children_of: dict[str, list[str]] = {}
@@ -165,7 +209,7 @@ def apply_assembly_to_skeleton(
 
     sk.order = order
     sk.descendants = descendants
-    return sk
+    return sk, cable_defs
 
 
 def resolve_and_apply(

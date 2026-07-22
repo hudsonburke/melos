@@ -719,9 +719,15 @@ def compile_with_assembly(req: CompileAssemblyRequest) -> dict:
     resolved = resolve_assembly(descriptor, lm_pos, lm_defs,
                                 subject_measurements=req.subject_overrides or None)
 
-    combined = apply_assembly_to_skeleton(_model.skeleton, resolved)
+    combined, cables = apply_assembly_to_skeleton(
+        _model.skeleton, resolved, landmark_positions=lm_pos,
+    )
 
-    xml = compile_skeleton(combined, f"{_model.name}_with_{req.assembly_name}")
+    xml = compile_skeleton(
+        combined, f"{_model.name}_with_{req.assembly_name}",
+        cables=cables,
+    )
 
     return {"mjcf": xml, "model": _model.name, "assembly": req.assembly_name,
-            "n_bodies": len(combined.links), "format": "mujoco_xml"}
+            "n_bodies": len(combined.links), "n_cables": len(cables),
+            "format": "mujoco_xml"}

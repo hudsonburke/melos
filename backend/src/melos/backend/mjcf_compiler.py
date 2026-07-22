@@ -1,9 +1,14 @@
-"""Arrow-native MJCF compiler — reads component types, outputs MuJoCo XML."""
+"""Arrow-native MJCF compiler — reads component types, outputs MuJoCo XML.
+
+Extends the base compiler with tendon (cable) and muscle actuator generation
+for exoskeleton cable-driven designs.
+"""
 
 from __future__ import annotations
 
 import math
 from pathlib import Path
+from typing import Any
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 from melos.backend.models import SkeletonState
@@ -16,14 +21,30 @@ def compile_skeleton(
     timestep: float = 0.01,
     gravity: list[float] | None = None,
     meshdir: str | None = None,
+    cables: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Compile SkeletonState to MJCF XML string."""
+    """Compile SkeletonState to MJCF XML string.
+
+    Args:
+        skeleton: The skeleton to compile.
+        model_name: Model name for the <mujoco> element.
+        timestep: Simulation timestep.
+        gravity: Gravity vector.
+        meshdir: Path to mesh files (for mesh geom output).
+        cables: Cable/tendon definitions from the assembly bridge.
+            Each entry::
+                {"id": "cable_1",
+                 "spring_length": 0.35, "diameter": 0.002, "max_force": 500.0,
+                 "via_points": [{"body": "exo_part", "pos": (x, y, z)}, ...]}
+
+    Returns:
+        Complete MJCF XML string.
+    """
     root = Element("mujoco", {"model": model_name})
     g = gravity or [0, 0, -9.81]
 
     compiler_attrs: dict[str, str] = {
-        "angle": "radian",
-        "balanceinertia": "true",
+        "angle": "radian", "balanceinertia": "true",
     }
     if meshdir:
         compiler_attrs["meshdir"] = meshdir
@@ -34,36 +55,32 @@ def compile_skeleton(
         "integrator": "RK4",
     })
 
-    # Asset section — define meshes for MuJoCo to find (only if files exist)
+    # Asset section — meshes
     asset = SubElement(root, "asset")
     seen_meshes: set[str] = set()
     for name, link in skeleton.links.items():
         if link and link.graphics_file and meshdir:
-            mesh_name = link.graphics_file.replace(".stl", "").replace(".vtp", "")
+            mesh_name = _mesh_name(link.graphics_file)
             if mesh_name not in seen_meshes:
-                # Check mesh file exists before adding
                 mesh_path = Path(meshdir) / link.graphics_file
                 if not mesh_path.exists():
-                    # Try with extensions
                     found = False
-                    for ext in [".stl", ".STL", ".obj", ".vtp", ".ply"]:
-                        if (mesh_path.parent / (mesh_path.name + ext)).exists():
+                    for ext in (".stl", ".STL", ".obj", ".vtp", ".ply"):
+                        candidate = mesh_path.parent / (mesh_path.name + ext)
+                        if candidate.exists():
                             found = True
-                            mesh_path = mesh_path.parent / (mesh_path.name + ext)
+                            mesh_path = candidate
                             break
                     if not found:
                         continue
-                SubElement(asset, "mesh", {
-                    "name": mesh_name,
-                    "file": str(mesh_path),
-                })
+                SubElement(asset, "mesh", {"name": mesh_name, "file": str(mesh_path)})
                 seen_meshes.add(mesh_name)
 
     worldbody = SubElement(root, "worldbody")
 
     all_children = set(skeleton.parent_map.keys())
-    roots = [n for n in skeleton.order if n not in all_children and n in skeleton.transforms]
-
+    roots = [n for n in skeleton.order
+             if n not in all_children and n in skeleton.transforms]
     children_of: dict[str, list[str]] = {}
     for c, p in skeleton.parent_map.items():
         children_of.setdefault(p, []).append(c)
@@ -74,19 +91,65 @@ def compile_skeleton(
         "conaffinity": "1", "condim": "3",
     })
 
-    for root_name in roots:
-        _build_body(worldbody, skeleton, root_name, children_of, meshdir)
+    # Build site registry: for each cable via-point, we need to know which
+    # body it lives on and its local position.
+    cable_sites: dict[str, list[tuple[str, str, tuple[float, ...]]]] = {}
+    if cables:
+        for cable in cables:
+            cid = cable["id"]
+            sites: list[tuple[str, str, tuple[float, ...]]] = []
+            for idx, vp in enumerate(cable.get("via_points", [])):
+                body = vp.get("body", "ground")
+                pos = vp.get("pos", (0, 0, 0))
+                site_name = f"{cid}_vp_{idx}"
+                sites.append((body, site_name, pos))
+            cable_sites[cid] = sites
 
-    # Actuators (position control on every non-fixed joint)
-    non_fixed = [(jn, jd) for jn, jd in skeleton.joints.items() if jd.joint_type != "FixedJoint"]
-    if non_fixed:
+    # Build body tree (with sites embedded)
+    for root_name in roots:
+        _build_body(worldbody, skeleton, root_name, children_of, meshdir,
+                    cable_sites)
+
+    # ── Tendon section ────────────────────────────────────────────────
+    if cables:
+        tendon = SubElement(root, "tendon")
+        for cable in cables:
+            sites = cable_sites.get(cable["id"], [])
+            if not sites:
+                continue
+            spat_attrs: dict[str, str] = {"name": cable["id"]}
+            if "spring_length" in cable:
+                spat_attrs["springlength"] = f"{cable['spring_length']:.6f}"
+            if "diameter" in cable:
+                spat_attrs["width"] = f"{cable['diameter']:.6f}"
+            spatial = SubElement(tendon, "spatial", spat_attrs)
+            for _, site_name, _ in sites:
+                SubElement(spatial, "site", {"site": site_name})
+
+    # ── Actuator section ──────────────────────────────────────────────
+    non_fixed = [(jn, jd) for jn, jd in skeleton.joints.items()
+                 if jd.joint_type != "FixedJoint"]
+    has_cables = cables is not None and len(cables) > 0
+    if non_fixed or has_cables:
         actuator = SubElement(root, "actuator")
         for jname, jdef in non_fixed:
             SubElement(actuator, "position", {
                 "name": f"{jname}_act", "joint": jname, "kp": "100",
             })
+        for cable in (cables or []):
+            tendon_name = cable["id"]
+            max_force = cable.get("max_force", 100.0)
+            SubElement(actuator, "motor", {
+                "name": f"{tendon_name}_act",
+                "tendon": tendon_name,
+                "gear": f"{max_force:.1f}",
+            })
 
     return _pretty_xml(root)
+
+
+def _mesh_name(gf: str) -> str:
+    return gf.replace(".stl", "").replace(".vtp", "").replace(".obj", "").replace(".ply", "")
 
 
 def _build_body(
@@ -95,8 +158,9 @@ def _build_body(
     name: str,
     children_of: dict[str, list[str]],
     meshdir: str | None = None,
+    cable_sites: dict[str, list[tuple[str, str, tuple[float, ...]]]] | None = None,
 ) -> None:
-    """Recursively build body/joint/geom elements."""
+    """Recursively build body/joint/geom + site elements."""
     xf = skeleton.transforms.get(name)
     link = skeleton.links.get(name)
     children = children_of.get(name, [])
@@ -104,20 +168,22 @@ def _build_body(
     pos = xf.translation if xf else (0, 0, 0)
     quat = xf.rotation if xf else (1, 0, 0, 0)
 
-    attrs: dict[str, str] = {"name": name, "pos": f"{pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}"}
+    attrs: dict[str, str] = {
+        "name": name,
+        "pos": f"{pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}",
+    }
     if quat != (1, 0, 0, 0):
         attrs["quat"] = f"{quat[0]:.6f} {quat[1]:.6f} {quat[2]:.6f} {quat[3]:.6f}"
 
     body = SubElement(parent, "body", attrs)
 
-    # Inertial — only if mass > 0 and inertia is positive-definite
+    # Inertial
     if link and link.mass > 1e-8:
         com = link.center_of_mass
         inertia = list(link.inertia)
-        # Ensure positive-definite: minimum floor for diagonal
         for idx in range(3):
             if inertia[idx] < 1e-10:
-                inertia[idx] = link.mass * 0.001  # small default
+                inertia[idx] = link.mass * 0.001
         SubElement(body, "inertial", {
             "pos": f"{com[0]:.6f} {com[1]:.6f} {com[2]:.6f}",
             "mass": f"{link.mass:.6f}",
@@ -125,16 +191,15 @@ def _build_body(
                            f"{inertia[3]:.10f} {inertia[4]:.10f} {inertia[5]:.10f}",
         })
 
-    # Joint — skip fixed joints (MuJoCo handles them implicitly)
+    # Joint
     for jname, jdef in skeleton.joints.items():
         if jdef.child_link == name:
             if jdef.joint_type == "FixedJoint":
-                break  # No joint element needed
+                break
             jtype = _mujoco_type(jdef.joint_type)
             ja: dict[str, str] = {"name": jname, "type": jtype}
             if jtype in ("hinge", "slide"):
                 ax = list(jdef.axis)
-                # MuJoCo requires non-zero axis
                 if all(abs(v) < 1e-10 for v in ax):
                     ax = [0.0, 0.0, 1.0]
                 ja["axis"] = f"{ax[0]:.6f} {ax[1]:.6f} {ax[2]:.6f}"
@@ -142,7 +207,6 @@ def _build_body(
             if math.isfinite(lim.lower) or math.isfinite(lim.upper):
                 lower = lim.lower if math.isfinite(lim.lower) else -3.14
                 upper = lim.upper if math.isfinite(lim.upper) else 3.14
-                # Clamp to MuJoCo-safe range
                 lower = max(lower, -10000.0)
                 upper = min(upper, 10000.0)
                 if lower < upper - 1e-10:
@@ -150,24 +214,31 @@ def _build_body(
             SubElement(body, "joint", ja)
             break
 
-    # Mesh geometry — only if mesh file exists in meshdir
-    mesh_geom = None
-    if link and link.graphics_file and meshdir:
+    # Sites for cable via-points on this body
+    if cable_sites:
+        for _, site_list in cable_sites.items():
+            for s_body, s_name, s_pos in site_list:
+                if s_body == name:
+                    SubElement(body, "site", {
+                        "name": s_name,
+                        "pos": f"{s_pos[0]:.6f} {s_pos[1]:.6f} {s_pos[2]:.6f}",
+                    })
+
+    # Mesh geometry
+    if link and link.graphics_file and meshdir and "." in link.graphics_file:
         mesh_path = Path(meshdir) / link.graphics_file
-        # Try common extensions
-        for ext in ["", ".stl", ".STL", ".obj", ".OBJ", ".vtp", ".ply"]:
+        for ext in ("", ".stl", ".STL", ".obj", ".vtp", ".ply"):
             test_path = mesh_path.parent / (mesh_path.name + ext) if ext else mesh_path
             if test_path.exists():
-                mesh_geom = SubElement(body, "geom", {
+                SubElement(body, "geom", {
                     "type": "mesh",
-                    "mesh": link.graphics_file.replace(".stl", "").replace(".vtp", ""),
+                    "mesh": _mesh_name(link.graphics_file),
                     "rgba": "0.8 0.8 0.8 1",
                 })
                 break
 
-    # Children
     for child in children:
-        _build_body(body, skeleton, child, children_of, meshdir)
+        _build_body(body, skeleton, child, children_of, meshdir, cable_sites)
 
 
 def _mujoco_type(jt: str) -> str:
@@ -177,7 +248,6 @@ def _mujoco_type(jt: str) -> str:
 
 
 def _pretty_xml(root: Element) -> str:
-    raw = tostring(root, encoding="unicode")
     import xml.dom.minidom
-    dom = xml.dom.minidom.parseString(raw.encode())
+    dom = xml.dom.minidom.parseString(tostring(root, encoding="unicode").encode())
     return dom.toprettyxml(indent="  ")

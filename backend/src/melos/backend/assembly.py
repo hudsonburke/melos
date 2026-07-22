@@ -156,4 +156,5 @@ def resolve_assembly(
     return {
         "name": descriptor.get("name", "unnamed"),
         "parts": resolved_parts,
+        "cables": descriptor.get("cables", []),
     }
