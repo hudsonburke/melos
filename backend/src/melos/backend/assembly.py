@@ -145,7 +145,8 @@ def resolve_assembly(
 
         resolved_parts.append({
             "id": part_id,
-            "type": part_type,
+            "part_type": part_type,
+            "description": part_spec.get("description", ""),
             "parameters": params,
             "attachments": attachments,
             "measurements": measurements,

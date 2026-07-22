@@ -584,3 +584,50 @@ def resolve_assembly(name: str) -> dict:
 
     resolved = resolve_assembly(descriptor, lm_pos, lm_defs)
     return {"name": resolved["name"], "parts": resolved["parts"]}
+
+
+# ── Assembly build endpoint ────────────────────────────────────────────────
+
+
+from pydantic import BaseModel
+
+
+class BuildAssemblyRequest(BaseModel):
+    subject_overrides: dict[str, float] = {}
+    """Optional subject-specific measurement overrides (metres)."""
+
+
+@app.post("/model/assembly/{name}/build")
+def build_assembly(name: str, req: BuildAssemblyRequest | None = None) -> dict:
+    """Resolve an assembly descriptor and return the Proteus-ready spec.
+
+    Returns the resolved part specifications that Proteus can consume
+    directly — no Python coupling required.
+    """
+    from melos.backend.assembly import load_assembly_descriptor, resolve_assembly
+    from melos.backend.landmarks import landmark_world_positions
+    from pathlib import Path
+
+    if _model is None:
+        raise HTTPException(404, "No model loaded.")
+
+    desc_path = Path(f"backend/src/melos/backend/descriptors/{name}.yaml")
+    if not desc_path.exists():
+        raise HTTPException(404, f"Assembly descriptor '{name}' not found")
+
+    descriptor = load_assembly_descriptor(desc_path)
+    lm_pos = landmark_world_positions(_model.skeleton)
+    lm_defs = {}
+    from melos.backend.marker_sets import builtin_marker_sets_dir, load_marker_set
+    ms_path = builtin_marker_sets_dir() / "gait_full_body.yaml"
+    if ms_path.exists():
+        ms = load_marker_set(ms_path)
+        for k, v in ms.get("landmarks", {}).items():
+            lm_defs[k] = v.get("melos", {})
+
+    subject_measurements = None
+    if req and req.subject_overrides:
+        subject_measurements = req.subject_overrides
+
+    resolved = resolve_assembly(descriptor, lm_pos, lm_defs, subject_measurements)
+    return {"name": resolved["name"], "version": descriptor.get("version", "1.0"), "parts": resolved["parts"]}

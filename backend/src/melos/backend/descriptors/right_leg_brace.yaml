@@ -1,0 +1,35 @@
+name: "right_leg_brace_v1"
+description: "Right leg exoskeleton brace. Thigh cuff at RThighUpper/RThighFront, shank cuff at RShankUpper/RShankRear."
+version: "1.0"
+parts:
+  - type: "Cuff"
+    id: "thigh_cuff_r"
+    description: "Right thigh cuff"
+    parameters:
+      coverage: 0.75
+      wall_thickness: 3.0
+      padding_thickness: 2.0
+      width: 60.0
+    attachments:
+      - { landmark: "RThighUpper", role: "proximal" }
+      - { landmark: "RThighFront", role: "distal" }
+    subject_measurements:
+      - segment: "thigh_length_r"
+        source: "landmark_distance"
+        landmarks: ["RThighUpper", "RThighFront"]
+
+  - type: "Cuff"
+    id: "shank_cuff_r"
+    description: "Right shank cuff"
+    parameters:
+      coverage: 0.7
+      wall_thickness: 2.5
+      padding_thickness: 2.0
+      width: 50.0
+    attachments:
+      - { landmark: "RShankUpper", role: "proximal" }
+      - { landmark: "RShankRear", role: "distal" }
+    subject_measurements:
+      - segment: "shank_length_r"
+        source: "landmark_distance"
+        landmarks: ["RShankUpper", "RShankRear"]
