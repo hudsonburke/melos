@@ -187,13 +187,22 @@ def apply_assembly_to_skeleton(
                     })
 
         if via_points:
-            cable_defs.append({
+            cable_def = {
                 "id": cable.get("id", f"cable_{len(cable_defs)}"),
                 "spring_length": cable.get("spring_length", 0.3),
                 "diameter": cable.get("diameter", 0.002),
                 "max_force": cable.get("max_force", 500.0),
                 "via_points": via_points,
-            })
+            }
+            # Pass through actuator type
+            atype = cable.get("actuator_type", "motor")
+            cable_def["actuator_type"] = atype
+            if atype == "muscle_hill":
+                for k in ("force", "range", "lmin", "lmax", "fpmax", "lengthrange"):
+                    v = cable.get(f"muscle_{k}")
+                    if v is not None:
+                        cable_def[f"muscle_{k}"] = v
+            cable_defs.append(cable_def)
 
     # Recompute descendants
     children_of: dict[str, list[str]] = {}

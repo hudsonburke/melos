@@ -93,10 +93,15 @@ parts:
 cables:
   - id: "flexor_cable_1"
     description: >
-      Primary flexor cable: backpack motor → proximal cuff → distal cuff →
-      across elbow (via lateral epicondyle) → forearm cup.
-    motor: "backpack_motor"
-    motor_port: "cable_exit_1"
+      Primary flexor cable: Hill-type muscle. Backpack motor → proximal cuff →
+      distal cuff → across elbow (via lateral epicondyle) → forearm cup.
+    actuator_type: "muscle_hill"
+    muscle_force: 500.0
+    muscle_range: [0.5, 1.5]
+    muscle_lmin: 0.4
+    muscle_lmax: 2.0
+    muscle_fpmax: 1.3
+    muscle_lengthrange: [0.2, 0.4]
     spring_length: 0.35
     diameter: 0.002
     max_force: 500.0

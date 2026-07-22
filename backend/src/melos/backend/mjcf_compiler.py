@@ -1,8 +1,4 @@
-"""Arrow-native MJCF compiler — reads component types, outputs MuJoCo XML.
-
-Extends the base compiler with tendon (cable) and muscle actuator generation
-for exoskeleton cable-driven designs.
-"""
+"""Arrow-native MJCF compiler with wrap surfaces and Hill-type muscles."""
 
 from __future__ import annotations
 
@@ -27,55 +23,97 @@ def compile_skeleton(
 
     Args:
         skeleton: The skeleton to compile.
-        model_name: Model name for the <mujoco> element.
-        timestep: Simulation timestep.
-        gravity: Gravity vector.
-        meshdir: Path to mesh files (for mesh geom output).
-        cables: Cable/tendon definitions from the assembly bridge.
-            Each entry::
-                {"id": "cable_1",
-                 "spring_length": 0.35, "diameter": 0.002, "max_force": 500.0,
-                 "via_points": [{"body": "exo_part", "pos": (x, y, z)}, ...]}
-
-    Returns:
-        Complete MJCF XML string.
+        cables: Cable/tendon definitions. Each entry::
+            {"id": "cable_1",
+             "actuator_type": "motor" | "muscle_hill",
+             "muscle_force": 769.595,  # Hill-type only
+             "muscle_range": [0.828, 1.588],
+             "muscle_lmin": 0.421, "muscle_lmax": 1.903,
+             "muscle_fpmax": 1.379,
+             "muscle_lengthrange": [0.254, 0.356],
+             "spring_length": 0.35, "diameter": 0.002, "max_force": 500.0,
+             "via_points": [
+                 {"body": "body_name", "pos": (x,y,z), "wrap_radius": 0.008},
+                 ...
+             ]}
     """
     root = Element("mujoco", {"model": model_name})
     g = gravity or [0, 0, -9.81]
 
-    compiler_attrs: dict[str, str] = {
+    SubElement(root, "compiler", {
         "angle": "radian", "balanceinertia": "true",
-    }
-    if meshdir:
-        compiler_attrs["meshdir"] = meshdir
-    SubElement(root, "compiler", compiler_attrs)
+        **({"meshdir": meshdir} if meshdir else {}),
+    })
     SubElement(root, "option", {
         "timestep": str(timestep),
         "gravity": f"{g[0]} {g[1]} {g[2]}",
         "integrator": "RK4",
     })
 
-    # Asset section — meshes
+    # ── Asset section ─────────────────────────────────────────────────
     asset = SubElement(root, "asset")
     seen_meshes: set[str] = set()
-    for name, link in skeleton.links.items():
-        if link and link.graphics_file and meshdir:
-            mesh_name = _mesh_name(link.graphics_file)
-            if mesh_name not in seen_meshes:
-                mesh_path = Path(meshdir) / link.graphics_file
-                if not mesh_path.exists():
-                    found = False
-                    for ext in (".stl", ".STL", ".obj", ".vtp", ".ply"):
-                        candidate = mesh_path.parent / (mesh_path.name + ext)
-                        if candidate.exists():
-                            found = True
-                            mesh_path = candidate
-                            break
-                    if not found:
-                        continue
-                SubElement(asset, "mesh", {"name": mesh_name, "file": str(mesh_path)})
-                seen_meshes.add(mesh_name)
+    for _, link in skeleton.links.items():
+        gf = link.graphics_file
+        if gf and meshdir and _mesh_name(gf) not in seen_meshes:
+            p = Path(meshdir) / gf
+            if not p.exists():
+                for ext in (".stl", ".STL", ".obj", ".vtp", ".ply"):
+                    c = p.parent / (p.name + ext)
+                    if c.exists():
+                        p = c
+                        break
+                else:
+                    continue
+            SubElement(asset, "mesh", {"name": _mesh_name(gf), "file": str(p)})
+            seen_meshes.add(_mesh_name(gf))
 
+    # ── Preprocess cable data ─────────────────────────────────────────
+    site_id_counter = [0]
+
+    def _site_name() -> str:
+        site_id_counter[0] += 1
+        return f"vp_{site_id_counter[0]}"
+
+    def _wrap_name(cid: str, idx: int) -> str:
+        return f"{cid}_wrap_{idx}"
+
+    # Build mapping: body → list of (site_name, pos) and (geom_name, pos, radius)
+    body_sites: dict[str, list[tuple[str, str, tuple[float, ...]]]] = {}
+    body_wrap_geoms: dict[str, list[tuple[str, str, tuple[float, ...], float]]] = {}
+    body_sidesites: dict[str, list[tuple[str, str, tuple[float, ...]]]] = {}
+    tendon_entries: list[tuple[str, list[tuple[str, str, float]]]] = []
+    # tendon_entries: [(cable_id, [(entry_type, name, wrap_radius), ...])]
+    # entry_type: "site" | "wrap"
+
+    if cables:
+        for cable in cables:
+            cid = cable["id"]
+            entries: list[tuple[str, str, float]] = []
+            for idx, vp in enumerate(cable.get("via_points", [])):
+                body = vp.get("body", "ground")
+                pos = vp.get("pos", (0, 0, 0))
+                wr = float(vp.get("wrap_radius", 0))
+
+                if wr > 0:
+                    # Wrap surface — cylinder/sphere geom
+                    gname = _wrap_name(cid, idx)
+                    body_wrap_geoms.setdefault(body, []).append(
+                        (gname, cid, tuple(pos), wr)
+                    )
+                    # Sidesite on the "back" of the wrap
+                    sn = f"{gname}_side"
+                    body_sites.setdefault(body, []).append((sn, cid, tuple(pos)))
+                    entries.append(("wrap", gname, wr))
+                else:
+                    # Regular via-point site
+                    sn = _site_name()
+                    body_sites.setdefault(body, []).append((sn, cid, tuple(pos)))
+                    entries.append(("site", sn, 0))
+
+            tendon_entries.append((cid, entries))
+
+    # ── World body ────────────────────────────────────────────────────
     worldbody = SubElement(root, "worldbody")
 
     all_children = set(skeleton.parent_map.keys())
@@ -91,65 +129,77 @@ def compile_skeleton(
         "conaffinity": "1", "condim": "3",
     })
 
-    # Build site registry: for each cable via-point, we need to know which
-    # body it lives on and its local position.
-    cable_sites: dict[str, list[tuple[str, str, tuple[float, ...]]]] = {}
-    if cables:
-        for cable in cables:
-            cid = cable["id"]
-            sites: list[tuple[str, str, tuple[float, ...]]] = []
-            for idx, vp in enumerate(cable.get("via_points", [])):
-                body = vp.get("body", "ground")
-                pos = vp.get("pos", (0, 0, 0))
-                site_name = f"{cid}_vp_{idx}"
-                sites.append((body, site_name, pos))
-            cable_sites[cid] = sites
-
-    # Build body tree (with sites embedded)
     for root_name in roots:
         _build_body(worldbody, skeleton, root_name, children_of, meshdir,
-                    cable_sites)
+                    body_sites, body_wrap_geoms, body_sidesites)
 
     # ── Tendon section ────────────────────────────────────────────────
-    if cables:
+    if tendon_entries:
         tendon = SubElement(root, "tendon")
-        for cable in cables:
-            sites = cable_sites.get(cable["id"], [])
-            if not sites:
+        for cable in (cables or []):
+            cid = cable["id"]
+            matched_entries = [e for e in tendon_entries if e[0] == cid]
+            if not matched_entries:
                 continue
-            spat_attrs: dict[str, str] = {"name": cable["id"]}
-            if "spring_length" in cable:
-                spat_attrs["springlength"] = f"{cable['spring_length']:.6f}"
-            if "diameter" in cable:
-                spat_attrs["width"] = f"{cable['diameter']:.6f}"
+            _, entries = matched_entries[0]
+            spat_attrs: dict[str, str] = {"name": cid}
+            sl = cable.get("spring_length")
+            if sl is not None:
+                spat_attrs["springlength"] = f"{sl:.6f}"
+            d = cable.get("diameter")
+            if d is not None:
+                spat_attrs["width"] = f"{d:.6f}"
             spatial = SubElement(tendon, "spatial", spat_attrs)
-            for _, site_name, _ in sites:
-                SubElement(spatial, "site", {"site": site_name})
+            for etype, name, _ in entries:
+                if etype == "site":
+                    SubElement(spatial, "site", {"site": name})
+                elif etype == "wrap":
+                    SubElement(spatial, "geom", {
+                        "geom": name, "sidesite": f"{name}_side",
+                    })
 
     # ── Actuator section ──────────────────────────────────────────────
     non_fixed = [(jn, jd) for jn, jd in skeleton.joints.items()
                  if jd.joint_type != "FixedJoint"]
-    has_cables = cables is not None and len(cables) > 0
+    has_cables = cables is not None
     if non_fixed or has_cables:
-        actuator = SubElement(root, "actuator")
-        for jname, jdef in non_fixed:
-            SubElement(actuator, "position", {
+        act = SubElement(root, "actuator")
+        for jname, _ in non_fixed:
+            SubElement(act, "position", {
                 "name": f"{jname}_act", "joint": jname, "kp": "100",
             })
         for cable in (cables or []):
-            tendon_name = cable["id"]
-            max_force = cable.get("max_force", 100.0)
-            SubElement(actuator, "motor", {
-                "name": f"{tendon_name}_act",
-                "tendon": tendon_name,
-                "gear": f"{max_force:.1f}",
-            })
+            cid = cable["id"]
+            atype = cable.get("actuator_type", "motor")
+            if atype == "muscle_hill":
+                m_attrs: dict[str, str] = {
+                    "name": f"{cid}_act", "tendon": cid,
+                    "force": f"{cable.get('muscle_force', 500):.3f}",
+                }
+                mr = cable.get("muscle_range")
+                if mr:
+                    m_attrs["range"] = f"{mr[0]:.6f} {mr[1]:.6f}"
+                for k in ("lmin", "lmax", "fpmax"):
+                    v = cable.get(f"muscle_{k}")
+                    if v is not None:
+                        m_attrs[k] = f"{v:.6f}"
+                lr = cable.get("muscle_lengthrange")
+                if lr:
+                    m_attrs["lengthrange"] = f"{lr[0]:.6f} {lr[1]:.6f}"
+                SubElement(act, "muscle", m_attrs)
+            else:
+                mf = cable.get("max_force", 100.0)
+                SubElement(act, "motor", {
+                    "name": f"{cid}_act", "tendon": cid, "gear": f"{mf:.1f}",
+                })
 
     return _pretty_xml(root)
 
 
 def _mesh_name(gf: str) -> str:
-    return gf.replace(".stl", "").replace(".vtp", "").replace(".obj", "").replace(".ply", "")
+    for suf in (".stl", ".vtp", ".obj", ".ply", ".STL", ".OBJ"):
+        gf = gf.replace(suf, "")
+    return gf
 
 
 def _build_body(
@@ -158,9 +208,10 @@ def _build_body(
     name: str,
     children_of: dict[str, list[str]],
     meshdir: str | None = None,
-    cable_sites: dict[str, list[tuple[str, str, tuple[float, ...]]]] | None = None,
+    body_sites: dict[str, list[tuple[str, str, tuple[float, ...]]]] | None = None,
+    body_wrap_geoms: dict[str, list[tuple[str, str, tuple[float, ...], float]]] | None = None,
+    body_sidesites: dict[str, list[tuple[str, str, tuple[float, ...]]]] | None = None,
 ) -> None:
-    """Recursively build body/joint/geom + site elements."""
     xf = skeleton.transforms.get(name)
     link = skeleton.links.get(name)
     children = children_of.get(name, [])
@@ -214,22 +265,37 @@ def _build_body(
             SubElement(body, "joint", ja)
             break
 
-    # Sites for cable via-points on this body
-    if cable_sites:
-        for _, site_list in cable_sites.items():
-            for s_body, s_name, s_pos in site_list:
-                if s_body == name:
-                    SubElement(body, "site", {
-                        "name": s_name,
-                        "pos": f"{s_pos[0]:.6f} {s_pos[1]:.6f} {s_pos[2]:.6f}",
-                    })
+    # Cable via-point sites on this body
+    if body_sites:
+        for s_name, s_cid, s_pos in body_sites.get(name, []):
+            SubElement(body, "site", {
+                "name": s_name,
+                "pos": f"{s_pos[0]:.6f} {s_pos[1]:.6f} {s_pos[2]:.6f}",
+            })
+        for s_name, s_cid, s_pos in body_sidesites.get(name, []):
+            SubElement(body, "site", {
+                "name": s_name,
+                "pos": f"{s_pos[0]:.6f} {s_pos[1]:.6f} {s_pos[2]:.6f}",
+            })
+
+    # Wrap surface geometries (group="2" for MuJoCo wrap)
+    if body_wrap_geoms:
+        for g_name, g_cid, g_pos, g_radius in body_wrap_geoms.get(name, []):
+            SubElement(body, "geom", {
+                "name": g_name,
+                "type": "cylinder",
+                "size": f"{g_radius:.6f} {g_radius * 2:.6f}",
+                "pos": f"{g_pos[0]:.6f} {g_pos[1]:.6f} {g_pos[2]:.6f}",
+                "group": "2",
+                "rgba": "0.5 0.5 0.9 0.4",
+            })
 
     # Mesh geometry
     if link and link.graphics_file and meshdir and "." in link.graphics_file:
-        mesh_path = Path(meshdir) / link.graphics_file
+        mp = Path(meshdir) / link.graphics_file
         for ext in ("", ".stl", ".STL", ".obj", ".vtp", ".ply"):
-            test_path = mesh_path.parent / (mesh_path.name + ext) if ext else mesh_path
-            if test_path.exists():
+            tp = mp.parent / (mp.name + ext) if ext else mp
+            if tp.exists():
                 SubElement(body, "geom", {
                     "type": "mesh",
                     "mesh": _mesh_name(link.graphics_file),
@@ -238,7 +304,8 @@ def _build_body(
                 break
 
     for child in children:
-        _build_body(body, skeleton, child, children_of, meshdir, cable_sites)
+        _build_body(body, skeleton, child, children_of, meshdir,
+                    body_sites, body_wrap_geoms, body_sidesites)
 
 
 def _mujoco_type(jt: str) -> str:
