@@ -291,23 +291,28 @@ def write_landmark_registry(path: str | Path) -> None:
 
 def landmark_world_positions(
     skeleton: SkeletonState,
-    registry: dict | None = None,
+    marker_set: dict | None = None,
+    set_name: str = "gait_full_body",
 ) -> dict[str, tuple[float, float, float]]:
     """Compute world-space positions of all landmarks for a given skeleton pose.
 
-    Each landmark is defined as a link-relative offset.  This function
-    transforms those offsets through the skeleton hierarchy to get
-    world positions.
+    Loads landmarks from a YAML marker set (default: gait_full_body).
+    Each landmark offset is transformed through the skeleton hierarchy
+    to get world positions.
     """
-    if registry is None:
-        registry = LANDMARK_REGISTRY
+    if marker_set is None:
+        from melos.backend.marker_sets import builtin_marker_sets_dir, load_marker_set
+        path = builtin_marker_sets_dir() / f"{set_name}.yaml"
+        if not path.exists():
+            return {}
+        marker_set = load_marker_set(path)
 
     # Build world transforms for all links
     from melos.backend.scaling import compute_bone_positions
     link_world = compute_bone_positions(skeleton)
 
     result: dict[str, tuple[float, float, float]] = {}
-    landmarks = registry.get("landmarks", {})
+    landmarks = marker_set.get("landmarks", {}) if marker_set else {}
     for name, entry in landmarks.items():
         melos_info = entry.get("melos", {})
         link_id = melos_info.get("link")

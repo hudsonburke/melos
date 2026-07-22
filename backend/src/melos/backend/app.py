@@ -329,21 +329,48 @@ def scale_by_vectors(req: ScaleByVectorsRequest) -> dict:
 
 
 @app.get("/model/landmarks")
-@app.get("/model/landmarks")
-def get_landmarks() -> dict:
-    """Return landmark registry with link-relative offsets for the frontend.
+@app.get("/model/marker-sets")
+def list_marker_sets() -> dict:
+    """List available marker sets (built-in YAML files)."""
+    from melos.backend.marker_sets import available_marker_sets
+    return available_marker_sets()
 
-    Each landmark carries:
-    - link: the parent link ID in the skeleton
-    - offset: [x, y, z] relative to that link's local frame
-    - wpos: world-space position (computed) for backward compat
+
+@app.get("/model/marker-sets/{set_name}")
+def get_marker_set(set_name: str) -> dict:
+    """Return a specific marker set by filename (without .yaml)."""
+    from melos.backend.marker_sets import load_marker_set
+    from melos.backend.marker_sets import builtin_marker_sets_dir
+    path = builtin_marker_sets_dir() / f"{set_name}.yaml"
+    if not path.exists():
+        raise HTTPException(404, f"Marker set '{set_name}' not found")
+    return load_marker_set(path)
+
+
+@app.get("/model/landmarks")
+def get_landmarks(set_name: str = "gait_full_body") -> dict:
+    """Return landmark definitions with link-relative offsets for the frontend.
+
+    The ``set_name`` parameter selects which YAML marker set to load.
+    Default is ``gait_full_body`` (57 landmarks from the Rajagopal model).
     """
+    from melos.backend.marker_sets import builtin_marker_sets_dir, load_marker_set
+
     if _model is None:
         raise HTTPException(404, "No model loaded.")
+
+    # Load the marker set from YAML
+    path = builtin_marker_sets_dir() / f"{set_name}.yaml"
+    if not path.exists():
+        raise HTTPException(404, f"Marker set '{set_name}' not found")
+    marker_set = load_marker_set(path)
+
+    # Compute world-space positions
     positions = landmark_world_positions(_model.skeleton)
-    # Build link-relative landmark definitions
+
+    # Build response definitions
     definitions = {}
-    for name, entry in LANDMARK_REGISTRY.get("landmarks", {}).items():
+    for name, entry in marker_set.get("landmarks", {}).items():
         melos = entry.get("melos", {})
         definitions[name] = {
             "link": melos.get("link", ""),
@@ -351,7 +378,13 @@ def get_landmarks() -> dict:
             "desc": entry.get("description", ""),
             "wpos": positions.get(name, [0, 0, 0]),
         }
-    return {"landmarks": definitions, "count": len(definitions)}
+
+    return {
+        "name": marker_set.get("name", set_name),
+        "description": marker_set.get("description", ""),
+        "landmarks": definitions,
+        "count": len(definitions),
+    }
 
 
 # ── Landmark scaling endpoint ──────────────────────────────────────────────
