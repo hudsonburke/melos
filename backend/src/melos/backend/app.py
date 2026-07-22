@@ -336,3 +336,39 @@ def get_landmarks():
         raise HTTPException(404, "No model loaded.")
     positions = landmark_world_positions(_model.skeleton)
     return {"landmarks": positions, "registry_source": "rajagopal2015"}
+
+
+# ── Landmark scaling endpoint ──────────────────────────────────────────────
+
+from pydantic import BaseModel
+
+
+class ScaleByLandmarksRequest(BaseModel):
+    subject_measurements: dict[str, float]
+    target_mass: float | None = None
+
+
+@app.post("/model/scale/landmarks")
+def scale_by_landmarks_endpoint(req: ScaleByLandmarksRequest):
+    """Scale the loaded model using landmark-derived segment lengths."""
+    from melos.backend.landmarks import landmark_world_positions
+    from melos.backend.landmark_scaling import scale_by_landmarks
+    if _model is None:
+        raise HTTPException(404, "No model loaded.")
+    lm_pos = landmark_world_positions(_model.skeleton)
+    report = scale_by_landmarks(
+        _model.skeleton,
+        lm_pos,
+        req.subject_measurements,
+        target_mass=req.target_mass,
+    )
+    _model.skeleton = report.scaled_skeleton
+    return {
+        "link_scale_factors": report.link_scale_factors,
+        "baseline_lengths": {},
+        "matched_segments": report.matched_segments,
+        "unmatched_segments": report.unmatched_segments,
+        "total_mass_before": report.total_mass_before,
+        "total_mass_after": report.total_mass_after,
+        "warnings": report.warnings,
+    }
