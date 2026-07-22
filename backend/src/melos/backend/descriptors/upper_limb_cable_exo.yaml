@@ -1,0 +1,128 @@
+# Full upper-limb cable-driven exoskeleton descriptor
+# Backpack motor mount, two cable-guide cuffs, forearm cup,
+# and two cables routing through them all.
+name: "upper_limb_cable_exo_v1"
+description: >
+  Full upper-limb cable-driven exoskeleton. Backpack-style motor mount
+  at C7/shoulders, two cable-guide cuffs on the upper arm, and a
+  terminal cup on the forearm. Cables route from the motor through
+  the cuff ports and across the elbow via landmark-defined via-points.
+version: "1.0"
+
+# ── Parametric parts ─────────────────────────────────────────────────────
+parts:
+
+  - type: "MotorMount"
+    id: "backpack_motor"
+    description: "Backpack-style motor mount with two cable outputs"
+    parameters:
+      motor_torque: 12.0
+      gear_ratio: 50.0
+      width: 80.0
+      height: 120.0
+      depth: 60.0
+    attachments:
+      - { landmark: "C7", role: "mount" }
+      - { landmark: "RACR", role: "stabilize_right" }
+      - { landmark: "LACR", role: "stabilize_left" }
+    subject_measurements:
+      - segment: "shoulder_width"
+        landmarks: ["RACR", "LACR"]
+      - segment: "torso_height"
+        landmarks: ["C7", "Sacral"]
+    cable_ports:
+      - { id: "cable_exit_1", type: "exit", position: [-0.03, -0.02, 0.05] }
+      - { id: "cable_exit_2", type: "exit", position: [0.03, -0.02, 0.05] }
+
+  - type: "Cuff"
+    id: "upper_cuff_proximal"
+    description: "Proximal upper-arm cable guide cuff"
+    parameters:
+      coverage: 0.75
+      wall_thickness: 3.0
+      padding_thickness: 2.0
+      width: 30.0
+    attachments:
+      - { landmark: "RUA1", role: "mount" }
+    subject_measurements:
+      - segment: "upper_arm_proximal_circumference"
+        landmarks: ["RUA1", "RUA3"]
+    cable_ports:
+      - { id: "cable_entry_1", type: "entry", position: [0.0, 0.01, 0.02] }
+      - { id: "cable_exit_1",  type: "exit",  position: [0.0, -0.01, 0.02] }
+      - { id: "cable_entry_2", type: "entry", position: [0.0, 0.01, -0.02] }
+      - { id: "cable_exit_2",  type: "exit",  position: [0.0, -0.01, -0.02] }
+
+  - type: "Cuff"
+    id: "upper_cuff_distal"
+    description: "Distal upper-arm cable guide cuff (near elbow)"
+    parameters:
+      coverage: 0.7
+      wall_thickness: 2.5
+      padding_thickness: 2.0
+      width: 25.0
+    attachments:
+      - { landmark: "RUA3", role: "mount" }
+    subject_measurements:
+      - segment: "upper_arm_distal_circumference"
+        landmarks: ["RUA3", "RLEpicondyle"]
+    cable_ports:
+      - { id: "cable_entry_1", type: "entry", position: [0.0, 0.01, 0.02] }
+      - { id: "cable_exit_1",  type: "exit",  position: [0.0, -0.01, 0.02] }
+      - { id: "cable_entry_2", type: "entry", position: [0.0, 0.01, -0.02] }
+      - { id: "cable_exit_2",  type: "exit",  position: [0.0, -0.01, -0.02] }
+
+  - type: "Cup"
+    id: "forearm_terminal_cup"
+    description: "Forearm terminal cup — cable termination point"
+    parameters:
+      depth: 30.0
+      width: 40.0
+      wall_thickness: 2.0
+    attachments:
+      - { landmark: "RStyloid",  role: "mount_proximal" }
+      - { landmark: "RFADist",   role: "mount_distal" }
+    subject_measurements:
+      - segment: "forearm_length_r"
+        landmarks: ["RFASup", "RStyloid"]
+    cable_ports:
+      - { id: "termination_1", type: "termination", position: [0.0, 0.0, 0.0] }
+      - { id: "termination_2", type: "termination", position: [0.0, 0.0, -0.02] }
+
+# ── Cable routing ─────────────────────────────────────────────────────────
+cables:
+  - id: "flexor_cable_1"
+    description: >
+      Primary flexor cable: backpack motor → proximal cuff → distal cuff →
+      across elbow (via lateral epicondyle) → forearm cup.
+    motor: "backpack_motor"
+    motor_port: "cable_exit_1"
+    spring_length: 0.35
+    diameter: 0.002
+    max_force: 500.0
+    path:
+      - { port: "upper_cuff_proximal/cable_entry_1" }
+      - { port: "upper_cuff_proximal/cable_exit_1" }
+      - { port: "upper_cuff_distal/cable_entry_1" }
+      - { port: "upper_cuff_distal/cable_exit_1" }
+      - { type: "via", landmark: "RLEpicondyle",
+          offset: [0.0, 0.0, 0.015], wrap_radius: 0.008 }
+      - { port: "forearm_terminal_cup/termination_1" }
+
+  - id: "flexor_cable_2"
+    description: >
+      Secondary flexor cable: backpack motor → proximal cuff → distal cuff →
+      across elbow (via medial epicondyle) → forearm cup.
+    motor: "backpack_motor"
+    motor_port: "cable_exit_2"
+    spring_length: 0.35
+    diameter: 0.002
+    max_force: 500.0
+    path:
+      - { port: "upper_cuff_proximal/cable_entry_2" }
+      - { port: "upper_cuff_proximal/cable_exit_2" }
+      - { port: "upper_cuff_distal/cable_entry_2" }
+      - { port: "upper_cuff_distal/cable_exit_2" }
+      - { type: "via", landmark: "RMEpicondyle",
+          offset: [0.0, 0.0, -0.015], wrap_radius: 0.008 }
+      - { port: "forearm_terminal_cup/termination_2" }
