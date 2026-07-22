@@ -329,13 +329,29 @@ def scale_by_vectors(req: ScaleByVectorsRequest) -> dict:
 
 
 @app.get("/model/landmarks")
-def get_landmarks():
-    """Return landmark registry with world-space positions for current model."""
-    from melos.backend.landmarks import landmark_world_positions
+@app.get("/model/landmarks")
+def get_landmarks() -> dict:
+    """Return landmark registry with link-relative offsets for the frontend.
+
+    Each landmark carries:
+    - link: the parent link ID in the skeleton
+    - offset: [x, y, z] relative to that link's local frame
+    - wpos: world-space position (computed) for backward compat
+    """
     if _model is None:
         raise HTTPException(404, "No model loaded.")
     positions = landmark_world_positions(_model.skeleton)
-    return {"landmarks": positions, "registry_source": "rajagopal2015"}
+    # Build link-relative landmark definitions
+    definitions = {}
+    for name, entry in LANDMARK_REGISTRY.get("landmarks", {}).items():
+        melos = entry.get("melos", {})
+        definitions[name] = {
+            "link": melos.get("link", ""),
+            "offset": melos.get("offset", [0, 0, 0]),
+            "desc": entry.get("description", ""),
+            "wpos": positions.get(name, [0, 0, 0]),
+        }
+    return {"landmarks": definitions, "count": len(definitions)}
 
 
 # ── Landmark scaling endpoint ──────────────────────────────────────────────

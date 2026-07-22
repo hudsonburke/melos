@@ -10,7 +10,7 @@ export default function App() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [transformMode, setTransformMode] = useState<"translate" | "rotate">("translate");
   const [showLandmarks, setShowLandmarks] = useState(false);
-  const [landmarks, setLandmarks] = useState<Record<string, [number, number, number]> | null>(null);
+  const [landmarks, setLandmarks] = useState<Record<string, { link: string; offset: [number, number, number] }> | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Load model from the Python backend
