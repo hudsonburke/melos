@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Scene from "./components/Scene";
 import ControlPanel from "./components/ControlPanel";
 import type { ModelState } from "./types/schema";
+import type { SkinBundle } from "./components/SkinnedBody";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8008";
 
@@ -11,6 +12,8 @@ export default function App() {
   const [transformMode, setTransformMode] = useState<"translate" | "rotate">("translate");
   const [showLandmarks, setShowLandmarks] = useState(false);
   const [landmarks, setLandmarks] = useState<Record<string, { link: string; offset: [number, number, number] }> | null>(null);
+  const [showSkin, setShowSkin] = useState(false);
+  const [skinBundle, setSkinBundle] = useState<SkinBundle | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Load model from the Python backend
@@ -25,10 +28,11 @@ export default function App() {
           throw new Error(`Load failed: ${loadRes.status}`);
         }
 
-        // Fetch both model state and landmarks in parallel
-        const [modelRes, landmarksRes] = await Promise.all([
+        // Fetch model state, landmarks, and skin bundle in parallel
+        const [modelRes, landmarksRes, skinRes] = await Promise.all([
           fetch(`${API_BASE}/model`),
-          fetch(`${API_BASE}/model/landmarks`),
+          fetch(`${API_BASE}/model/landmarks?set_name=gait_full_body`),
+          fetch(`${API_BASE}/model/skin`),
         ]);
 
         if (modelRes.ok) {
@@ -38,6 +42,10 @@ export default function App() {
         if (landmarksRes.ok) {
           const data = await landmarksRes.json();
           setLandmarks(data.landmarks);
+        }
+        if (skinRes.ok) {
+          const data = await skinRes.json();
+          setSkinBundle(data);
         }
       } catch (e) {
         console.warn("Backend not available, using demo data", e);
@@ -56,7 +64,8 @@ export default function App() {
           ? <div className="loading">Loading model...</div>
           : <Scene model={model} onSelect={setSelectedPath} selected={selectedPath}
             apiBase={API_BASE} transformMode={transformMode}
-            showLandmarks={showLandmarks} landmarks={landmarks} />
+            showLandmarks={showLandmarks} landmarks={landmarks}
+            showSkin={showSkin} skinBundle={skinBundle} />
         }
       </div>
       <div className="sidebar">
@@ -68,6 +77,14 @@ export default function App() {
           onModeChange={setTransformMode}
           showLandmarks={showLandmarks}
           onLandmarkToggle={() => setShowLandmarks(!showLandmarks)}
+          showSkin={showSkin}
+          onSkinToggle={() => {
+            if (!skinBundle) {
+              // Try fetching on first toggle
+              fetch(`${API_BASE}/model/skin`).then(r => r.json()).then(setSkinBundle).catch(() => {});
+            }
+            setShowSkin(!showSkin);
+          }}
         />
       </div>
     </div>

@@ -501,3 +501,46 @@ def fit_from_mhr(req: MHRFitRequest) -> dict:
             }
 
     return result
+
+
+# ── Skin bundle endpoint ──────────────────────────────────────────────────
+
+
+@app.get("/model/skin")
+def get_skin_bundle() -> dict:
+    """Return the MHR skin bundle data for frontend SkinnedMesh rendering.
+
+    Returns vertices, faces, skin weights, joint hierarchy, and bind pose
+    from the SOMA reference bundle.  The frontend uses this to render a
+    skinned mesh overlaid on the skeleton.
+    """
+    from melos.skin.adapters.skin_bundle import load_example_skin_reference_bundle
+    from pathlib import Path
+
+    npz_path = Path("resources/third_party/skin/SOMA_neutral_reference.npz")
+    if not npz_path.exists():
+        raise HTTPException(404, f"Skin bundle not found. Run build_reference_bundle.py first.")
+
+    bundle = load_example_skin_reference_bundle(npz_path)
+    if bundle is None:
+        raise HTTPException(500, "Failed to load skin bundle")
+
+    # Convert numpy arrays to plain Python lists for JSON serialization
+    def _to_list(val):
+        if hasattr(val, "tolist"):
+            return val.tolist()
+        return val
+
+    return {
+        "vertices": [_to_list(v) for v in bundle["vertices"]],
+        "faces": [_to_list(f) for f in bundle["faces"]],
+        "joint_names": list(bundle["joint_names"]),
+        "joint_parent_ids": [int(i) for i in bundle["joint_parent_ids"]],
+        "joints": {k: [float(v) for v in val] for k, val in bundle["joints"].items()},
+        "bind_pose_world": _to_list(bundle["bind_pose_world"]),
+        "weight_data": [float(w) for w in bundle["weight_data"]],
+        "weight_indices": [int(i) for i in bundle["weight_indices"]],
+        "weight_indptr": [int(i) for i in bundle["weight_indptr"]],
+        "n_verts": len(bundle["vertices"]),
+        "n_faces": len(bundle["faces"]),
+    }

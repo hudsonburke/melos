@@ -8,9 +8,11 @@ interface Props {
   onModeChange: (m: "translate" | "rotate") => void;
   showLandmarks: boolean;
   onLandmarkToggle: () => void;
+  showSkin: boolean;
+  onSkinToggle: () => void;
 }
 
-export default function ControlPanel({ model, selectedPath, apiBase, transformMode, onModeChange, showLandmarks, onLandmarkToggle }: Props) {
+export default function ControlPanel({ model, selectedPath, apiBase, transformMode, onModeChange, showLandmarks, onLandmarkToggle, showSkin, onSkinToggle }: Props) {
   if (!model) {
     return (
       <aside className="sidebar">
@@ -83,7 +85,24 @@ export default function ControlPanel({ model, selectedPath, apiBase, transformMo
           textAlign: "left",
         }}
       >
-        {showLandmarks ? "◉" : "○"} Landmarks (57)
+        {showLandmarks ? "◉" : "○"} Landmarks
+      </button>
+      <button
+        onClick={onSkinToggle}
+        style={{
+          width: "100%",
+          padding: "4px 8px",
+          marginBottom: 8,
+          background: showSkin ? "#ff6644" : "#333",
+          color: "#fff",
+          border: "1px solid #555",
+          borderRadius: 4,
+          cursor: "pointer",
+          fontSize: 12,
+          textAlign: "left",
+        }}
+      >
+        {showSkin ? "◉" : "○"} Skin (18K verts)
       </button>
 
       {/* Selected entity details */}

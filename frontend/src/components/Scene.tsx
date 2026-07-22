@@ -11,6 +11,8 @@ import {
 } from "@react-three/drei";
 import * as THREE from "three";
 import type { ModelState, SkeletonState } from "../types/schema";
+import type { SkinBundle } from "./SkinnedBody";
+import SkinnedBody from "./SkinnedBody";
 
 type LandmarkData = Record<string, { link: string; offset: [number, number, number] }>;
 
@@ -24,9 +26,11 @@ interface SceneProps {
   transformMode: "translate" | "rotate";
   showLandmarks: boolean;
   landmarks: LandmarkData | null;
+  showSkin: boolean;
+  skinBundle: SkinBundle | null;
 }
 
-export default function Scene({ model, onSelect, selected, apiBase, transformMode, showLandmarks, landmarks }: SceneProps) {
+export default function Scene({ model, onSelect, selected, apiBase, transformMode, showLandmarks, landmarks, showSkin, skinBundle }: SceneProps) {
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <Canvas camera={{ position: [2, 2, 3], fov: 50 }} style={{ background: "#1a1a1a" }}>
@@ -36,11 +40,16 @@ export default function Scene({ model, onSelect, selected, apiBase, transformMod
         <Grid infiniteGrid />
         <OrbitControls makeDefault />
         {model && (
-          <SkeletonRenderer
-            skeleton={model.skeleton} selected={selected} onSelect={onSelect}
-            apiBase={apiBase} transformMode={transformMode}
-            showLandmarks={showLandmarks} landmarks={landmarks}
-          />
+          <>
+            <SkeletonRenderer
+              skeleton={model.skeleton} selected={selected} onSelect={onSelect}
+              apiBase={apiBase} transformMode={transformMode}
+              showLandmarks={showLandmarks} landmarks={landmarks}
+            />
+            {showSkin && skinBundle && (
+              <SkinnedBody bundle={skinBundle} />
+            )}
+          </>
         )}
       </Canvas>
     </div>
