@@ -661,7 +661,7 @@ def import_mjcf(path: str) -> dict:
         raise HTTPException(404, f"MJCF file not found: {resolved}")
 
     try:
-        skeleton = parse_mjcf(str(resolved))
+        skeleton, cables = parse_mjcf(str(resolved))
     except Exception as e:
         raise HTTPException(400, f"Failed to parse MJCF: {e}")
 
@@ -675,6 +675,7 @@ def import_mjcf(path: str) -> dict:
         "name": _model.name,
         "n_links": len(skeleton.links),
         "n_joints": len(skeleton.joints),
+        "n_cables": len(cables),
     }
 
 

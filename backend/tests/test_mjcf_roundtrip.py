@@ -27,7 +27,7 @@ DESCRIPTORS = Path("backend/src/melos/backend/descriptors")
 
 def test_roundtrip_validates_in_mujoco() -> None:
     """Parse MyoSuite model → compile → MuJoCo loads without errors."""
-    skeleton = parse_mjcf(MODEL)
+    skeleton, cables = parse_mjcf(MODEL)
     assert skeleton is not None
     assert len(skeleton.links) >= 3
     assert len(skeleton.joints) >= 1
@@ -56,7 +56,7 @@ def test_assembly_compile() -> None:
     from melos.backend.assembly import load_assembly_descriptor, resolve_assembly
     from melos.backend.landmarks import landmark_world_positions
 
-    skeleton = parse_mjcf(MODEL)
+    skeleton, cables = parse_mjcf(MODEL)
     lm_pos = landmark_world_positions(skeleton)
     lm_defs = {}
     from melos.backend.marker_sets import builtin_marker_sets_dir, load_marker_set
