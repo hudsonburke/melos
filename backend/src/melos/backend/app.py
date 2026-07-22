@@ -328,7 +328,6 @@ def scale_by_vectors(req: ScaleByVectorsRequest) -> dict:
 # ── Landmark endpoint ─────────────────────────────────────────────────────
 
 
-@app.get("/model/landmarks")
 @app.get("/model/marker-sets")
 def list_marker_sets() -> dict:
     """List available marker sets (built-in YAML files)."""

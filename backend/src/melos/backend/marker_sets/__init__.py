@@ -48,7 +48,7 @@ def load_marker_set(path: str | Path) -> dict[str, Any]:
 
 def builtin_marker_sets_dir() -> Path:
     """Return the path to the built-in marker set YAML files."""
-    return Path(__file__).resolve().parent / "marker_sets"
+    return Path(__file__).resolve().parent
 
 
 def list_builtin_marker_sets() -> list[dict[str, str]]:
