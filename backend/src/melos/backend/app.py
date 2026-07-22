@@ -646,3 +646,33 @@ def compile_model() -> dict:
 
     xml = compile_skeleton(_model.skeleton, _model.name)
     return {"mjcf": xml, "model": _model.name, "format": "mujoco_xml"}
+
+
+# ── MJCF import endpoint ──────────────────────────────────────────────────
+
+
+@app.post("/model/import/mjcf")
+def import_mjcf(path: str) -> dict:
+    """Import an MJCF model file into the Melos skeleton."""
+    from melos.backend.mjcf_parser import parse_mjcf
+
+    resolved = Path(path).expanduser().resolve()
+    if not resolved.exists():
+        raise HTTPException(404, f"MJCF file not found: {resolved}")
+
+    try:
+        skeleton = parse_mjcf(str(resolved))
+    except Exception as e:
+        raise HTTPException(400, f"Failed to parse MJCF: {e}")
+
+    global _model
+    _model = ModelState(
+        name=resolved.stem,
+        skeleton=skeleton,
+    )
+
+    return {
+        "name": _model.name,
+        "n_links": len(skeleton.links),
+        "n_joints": len(skeleton.joints),
+    }
