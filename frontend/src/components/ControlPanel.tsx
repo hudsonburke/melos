@@ -6,9 +6,11 @@ interface Props {
   apiBase: string;
   transformMode: "translate" | "rotate";
   onModeChange: (m: "translate" | "rotate") => void;
+  showLandmarks: boolean;
+  onLandmarkToggle: () => void;
 }
 
-export default function ControlPanel({ model, selectedPath, apiBase, transformMode, onModeChange }: Props) {
+export default function ControlPanel({ model, selectedPath, apiBase, transformMode, onModeChange, showLandmarks, onLandmarkToggle }: Props) {
   if (!model) {
     return (
       <aside className="sidebar">
@@ -63,6 +65,26 @@ export default function ControlPanel({ model, selectedPath, apiBase, transformMo
           </button>
         ))}
       </div>
+
+      {/* Landmark toggle */}
+      <h3>Overlays</h3>
+      <button
+        onClick={onLandmarkToggle}
+        style={{
+          width: "100%",
+          padding: "4px 8px",
+          marginBottom: 8,
+          background: showLandmarks ? "#44aaff" : "#333",
+          color: "#fff",
+          border: "1px solid #555",
+          borderRadius: 4,
+          cursor: "pointer",
+          fontSize: 12,
+          textAlign: "left",
+        }}
+      >
+        {showLandmarks ? "◉" : "○"} Landmarks (57)
+      </button>
 
       {/* Selected entity details */}
       {selectedPath && (

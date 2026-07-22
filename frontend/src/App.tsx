@@ -9,13 +9,14 @@ export default function App() {
   const [model, setModel] = useState<ModelState | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [transformMode, setTransformMode] = useState<"translate" | "rotate">("translate");
+  const [showLandmarks, setShowLandmarks] = useState(false);
+  const [landmarks, setLandmarks] = useState<Record<string, [number, number, number]> | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Load model from the Python backend
   useEffect(() => {
     async function loadModel() {
       try {
-        // First load the model file on the server
         const loadRes = await fetch(
           `${API_BASE}/model/load?path=/var/lib/hermes/rerun-importer-osim/test_data/RajagopalData/Rajagopal2015.osim`,
           { method: "POST" }
@@ -24,13 +25,19 @@ export default function App() {
           throw new Error(`Load failed: ${loadRes.status}`);
         }
 
-        // Then fetch the model state
-        const res = await fetch(`${API_BASE}/model`);
-        if (res.ok) {
-          const data = await res.json();
+        // Fetch both model state and landmarks in parallel
+        const [modelRes, landmarksRes] = await Promise.all([
+          fetch(`${API_BASE}/model`),
+          fetch(`${API_BASE}/model/landmarks`),
+        ]);
+
+        if (modelRes.ok) {
+          const data = await modelRes.json();
           setModel(data);
-        } else {
-          throw new Error(`Fetch failed: ${res.status}`);
+        }
+        if (landmarksRes.ok) {
+          const data = await landmarksRes.json();
+          setLandmarks(data.landmarks);
         }
       } catch (e) {
         console.warn("Backend not available, using demo data", e);
@@ -48,7 +55,8 @@ export default function App() {
         {loading
           ? <div className="loading">Loading model...</div>
           : <Scene model={model} onSelect={setSelectedPath} selected={selectedPath}
-            apiBase={API_BASE} transformMode={transformMode} />
+            apiBase={API_BASE} transformMode={transformMode}
+            showLandmarks={showLandmarks} landmarks={landmarks} />
         }
       </div>
       <div className="sidebar">
@@ -58,6 +66,8 @@ export default function App() {
           apiBase={API_BASE}
           transformMode={transformMode}
           onModeChange={setTransformMode}
+          showLandmarks={showLandmarks}
+          onLandmarkToggle={() => setShowLandmarks(!showLandmarks)}
         />
       </div>
     </div>

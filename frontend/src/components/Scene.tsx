@@ -6,6 +6,8 @@ import {
   Grid,
   Box,
   Line,
+  Sphere,
+  Text,
 } from "@react-three/drei";
 import * as THREE from "three";
 import type { ModelState, SkeletonState } from "../types/schema";
@@ -18,9 +20,11 @@ interface SceneProps {
   selected: string | null;
   apiBase: string;
   transformMode: "translate" | "rotate";
+  showLandmarks: boolean;
+  landmarks: Record<string, [number, number, number]> | null;
 }
 
-export default function Scene({ model, onSelect, selected, apiBase, transformMode }: SceneProps) {
+export default function Scene({ model, onSelect, selected, apiBase, transformMode, showLandmarks, landmarks }: SceneProps) {
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <Canvas
@@ -33,20 +37,26 @@ export default function Scene({ model, onSelect, selected, apiBase, transformMod
         <Grid infiniteGrid />
         <OrbitControls makeDefault />
         {model && (
-          <SkeletonRenderer
-            skeleton={model.skeleton}
-            selected={selected}
-            onSelect={onSelect}
-            apiBase={apiBase}
-            transformMode={transformMode}
-          />
+          <>
+            <SkeletonRenderer
+              skeleton={model.skeleton}
+              selected={selected}
+              onSelect={onSelect}
+              apiBase={apiBase}
+              transformMode={transformMode}
+            />
+            {showLandmarks && landmarks && (
+              <LandmarkOverlay landmarks={landmarks} />
+            )}
+          </>
         )}
       </Canvas>
     </div>
   );
 }
 
-// ── Children map — computed once from parent_map ─────────────────────────
+// ── Children map ─────────────────────────────────────────────────────────
+
 
 function useChildrenOf(pm: Record<string, string>): Record<string, string[]> {
   return useMemo(() => {
@@ -71,12 +81,10 @@ function SkeletonRenderer({ skeleton, selected, onSelect, apiBase, transformMode
   const allChildren = useMemo(() => new Set(Object.keys(skeleton.parent_map)), [skeleton.parent_map]);
   const roots = skeleton.order.filter((n) => !allChildren.has(n));
 
-  // Compute bone positions from parent_map (flat, for Line rendering only)
   const worldPoses = useMemo(() => computeBonePositions(skeleton), [skeleton]);
 
   return (
     <group>
-      {/* Hierarchical scene graph — Three.js handles child propagation */}
       {roots.map((name) => (
         <LinkGroup
           key={name}
@@ -89,8 +97,6 @@ function SkeletonRenderer({ skeleton, selected, onSelect, apiBase, transformMode
           transformMode={transformMode}
         />
       ))}
-
-      {/* Bones — rendered flat from precomputed world positions */}
       {Object.entries(skeleton.parent_map).map(([child, parent]) => {
         const c = worldPoses.get(child);
         const p = worldPoses.get(parent);
@@ -101,14 +107,11 @@ function SkeletonRenderer({ skeleton, selected, onSelect, apiBase, transformMode
   );
 }
 
-// ── Bone position computation (flat, parent-relative → world, minimal) ──
+// ── Bone position computation ────────────────────────────────────────────
 
 function computeBonePositions(s: SkeletonState): Map<string, THREE.Vector3> {
   const m = new Map<string, THREE.Vector3>();
-  // Use precomputed order from backend body list (parent-before-child)
-  const order = s.order.length
-    ? s.order
-    : [...new Set([...Object.keys(s.transforms), ...Object.keys(s.parent_map)])];
+  const order = s.order.length ? s.order : Object.keys(s.parent_map);
   for (const name of order) {
     const xf = s.transforms[name];
     const pos = xf
@@ -127,7 +130,48 @@ function computeBonePositions(s: SkeletonState): Map<string, THREE.Vector3> {
   return m;
 }
 
-// ── Recursive link group (the actual scene graph) ────────────────────────
+// ── Landmark overlay ─────────────────────────────────────────────────────
+
+function LandmarkOverlay({ landmarks: lm }: { landmarks: Record<string, [number, number, number]> }) {
+  return (
+    <group>
+      {Object.entries(lm).map(([name, pos]) => (
+        <LandmarkDot key={name} name={name} position={new THREE.Vector3(pos[0], pos[1], pos[2])} />
+      ))}
+    </group>
+  );
+}
+
+function LandmarkDot({ name, position }: { name: string; position: THREE.Vector3 }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <group position={position}>
+      <Sphere args={[0.015, 8, 8]}
+        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
+        onPointerOut={() => setHovered(false)}
+      >
+        <meshStandardMaterial
+          color={hovered ? "#ffff00" : "#ff4444"}
+          emissive={hovered ? "#ffff00" : "#ff4444"}
+          emissiveIntensity={0.3}
+        />
+      </Sphere>
+      {hovered && (
+        <Text
+          position={[0, 0.04, 0]}
+          fontSize={0.03}
+          color="white"
+          anchorX="center"
+          anchorY="bottom"
+        >
+          {name}
+        </Text>
+      )}
+    </group>
+  );
+}
+
+// ── Recursive link group ─────────────────────────────────────────────────
 
 function LinkGroup({
   name, skeleton, childrenOf, selected, onSelect, apiBase, transformMode,
@@ -150,7 +194,6 @@ function LinkGroup({
   const children = childrenOf[name] || [];
   const isSelected = selected === name;
   if (!link?.visible) {
-    // Invisible — still render children but skip the visual
     return (
       <group ref={groupRef}>
         {children.map((c) => (
@@ -186,7 +229,6 @@ function LinkGroup({
     if (node) setMeshReady(true);
   };
 
-  // Convert (w, x, y, z) backend quat → Three.js (x, y, z, w)
   const t = xf?.translation ?? [0, 0, 0];
   const r = xf?.rotation ?? [1, 0, 0, 0];
 
@@ -203,7 +245,6 @@ function LinkGroup({
         onClick={(e) => { e.stopPropagation(); onSelect(isSelected ? null : name); }}>
         <meshStandardMaterial color={color} transparent opacity={0.85} />
       </Box>
-
       {children.map((c) => (
         <LinkGroup key={c} name={c} skeleton={skeleton} childrenOf={childrenOf}
           selected={selected} onSelect={onSelect} apiBase={apiBase}
