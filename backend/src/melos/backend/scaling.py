@@ -59,6 +59,27 @@ def _link_ids_in_order(skeleton: SkeletonState) -> list[str]:
     return [n for n in skeleton.order if n not in all_children]
 
 
+def compute_bone_positions(s: SkeletonState) -> dict[str, tuple[float, float, float]]:
+    """Return world-space position of each link's origin (parent-relative → world).
+
+    Iterates in parent-before-child order so parent positions are always
+    available when computing children.
+    """
+    result: dict[str, tuple[float, float, float]] = {}
+    order = s.order or list(s.parent_map.keys())
+    for name in order:
+        xf = s.transforms.get(name)
+        px, py, pz = (xf.translation[0], xf.translation[1], xf.translation[2]) if xf else (0, 0, 0)
+        parent = s.parent_map.get(name)
+        if parent and parent in result:
+            pp = result[parent]
+            px += pp[0]
+            py += pp[1]
+            pz += pp[2]
+        result[name] = (px, py, pz)
+    return result
+
+
 def _compute_child_map(skeleton: SkeletonState) -> dict[str, list[str]]:
     """Build parent → children list from parent_map."""
     children: dict[str, list[str]] = {}

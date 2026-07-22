@@ -277,7 +277,8 @@ class ScaleByVectorsRequest(BaseModel):
     target_mass: float | None = None
 
 
-from melos.backend.scaling import by_segment_lengths, by_bone_vectors
+from melos.backend.scaling import by_segment_lengths, by_bone_vectors, compute_bone_positions
+from melos.backend.landmarks import LANDMARK_REGISTRY, landmark_world_positions
 
 
 @app.post("/model/scale/lengths")
@@ -322,3 +323,16 @@ def scale_by_vectors(req: ScaleByVectorsRequest) -> dict:
         "total_mass_after": report.total_mass_after,
         "warnings": report.warnings,
     }
+
+
+# ── Landmark endpoint ─────────────────────────────────────────────────────
+
+
+@app.get("/model/landmarks")
+def get_landmarks():
+    """Return landmark registry with world-space positions for current model."""
+    from melos.backend.landmarks import landmark_world_positions
+    if _model is None:
+        raise HTTPException(404, "No model loaded.")
+    positions = landmark_world_positions(_model.skeleton)
+    return {"landmarks": positions, "registry_source": "rajagopal2015"}
