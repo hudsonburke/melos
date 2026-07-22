@@ -631,3 +631,18 @@ def build_assembly(name: str, req: BuildAssemblyRequest | None = None) -> dict:
 
     resolved = resolve_assembly(descriptor, lm_pos, lm_defs, subject_measurements)
     return {"name": resolved["name"], "version": descriptor.get("version", "1.0"), "parts": resolved["parts"]}
+
+
+# ── MJCF compilation endpoint ─────────────────────────────────────────────
+
+
+@app.get("/model/compile")
+def compile_model() -> dict:
+    """Compile the current Melos skeleton to MJCF XML."""
+    from melos.backend.mjcf_compiler import compile_skeleton
+
+    if _model is None:
+        raise HTTPException(404, "No model loaded.")
+
+    xml = compile_skeleton(_model.skeleton, _model.name)
+    return {"mjcf": xml, "model": _model.name, "format": "mujoco_xml"}
