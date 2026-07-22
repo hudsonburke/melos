@@ -676,3 +676,52 @@ def import_mjcf(path: str) -> dict:
         "n_links": len(skeleton.links),
         "n_joints": len(skeleton.joints),
     }
+
+
+# ── Compile with assembly endpoint ────────────────────────────────────────
+
+
+from pydantic import BaseModel
+
+
+class CompileAssemblyRequest(BaseModel):
+    assembly_name: str
+    subject_overrides: dict[str, float] = {}
+
+
+@app.post("/model/compile/with-assembly")
+def compile_with_assembly(req: CompileAssemblyRequest) -> dict:
+    """Load an assembly, apply it to the current skeleton, and compile to MJCF."""
+    from melos.backend.assembly import load_assembly_descriptor, resolve_assembly
+    from melos.backend.assembly_bridge import apply_assembly_to_skeleton
+    from melos.backend.landmarks import landmark_world_positions
+    from melos.backend.marker_sets import builtin_marker_sets_dir, load_marker_set
+    from melos.backend.mjcf_compiler import compile_skeleton
+    from pathlib import Path
+
+    if _model is None:
+        raise HTTPException(404, "No model loaded.")
+
+    desc_path = Path(f"backend/src/melos/backend/descriptors/{req.assembly_name}.yaml")
+    if not desc_path.exists():
+        raise HTTPException(404, f"Assembly '{req.assembly_name}' not found")
+
+    descriptor = load_assembly_descriptor(desc_path)
+    lm_pos = landmark_world_positions(_model.skeleton)
+
+    lm_defs = {}
+    ms_path = builtin_marker_sets_dir() / "gait_full_body.yaml"
+    if ms_path.exists():
+        ms = load_marker_set(ms_path)
+        for k, v in ms.get("landmarks", {}).items():
+            lm_defs[k] = v.get("melos", {})
+
+    resolved = resolve_assembly(descriptor, lm_pos, lm_defs,
+                                subject_measurements=req.subject_overrides or None)
+
+    combined = apply_assembly_to_skeleton(_model.skeleton, resolved)
+
+    xml = compile_skeleton(combined, f"{_model.name}_with_{req.assembly_name}")
+
+    return {"mjcf": xml, "model": _model.name, "assembly": req.assembly_name,
+            "n_bodies": len(combined.links), "format": "mujoco_xml"}

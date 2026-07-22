@@ -77,12 +77,14 @@ def compile_skeleton(
     for root_name in roots:
         _build_body(worldbody, skeleton, root_name, children_of, meshdir)
 
-    # Actuators (position control on every joint)
-    actuator = SubElement(root, "actuator")
-    for jname in skeleton.joints:
-        SubElement(actuator, "position", {
-            "name": f"{jname}_act", "joint": jname, "kp": "100",
-        })
+    # Actuators (position control on every non-fixed joint)
+    non_fixed = [(jn, jd) for jn, jd in skeleton.joints.items() if jd.joint_type != "FixedJoint"]
+    if non_fixed:
+        actuator = SubElement(root, "actuator")
+        for jname, jdef in non_fixed:
+            SubElement(actuator, "position", {
+                "name": f"{jname}_act", "joint": jname, "kp": "100",
+            })
 
     return _pretty_xml(root)
 
@@ -108,10 +110,14 @@ def _build_body(
 
     body = SubElement(parent, "body", attrs)
 
-    # Inertial
-    if link and link.mass > 0:
+    # Inertial — only if mass > 0 and inertia is positive-definite
+    if link and link.mass > 1e-8:
         com = link.center_of_mass
-        inertia = link.inertia
+        inertia = list(link.inertia)
+        # Ensure positive-definite: minimum floor for diagonal
+        for idx in range(3):
+            if inertia[idx] < 1e-10:
+                inertia[idx] = link.mass * 0.001  # small default
         SubElement(body, "inertial", {
             "pos": f"{com[0]:.6f} {com[1]:.6f} {com[2]:.6f}",
             "mass": f"{link.mass:.6f}",
@@ -119,19 +125,28 @@ def _build_body(
                            f"{inertia[3]:.10f} {inertia[4]:.10f} {inertia[5]:.10f}",
         })
 
-    # Joint
+    # Joint — skip fixed joints (MuJoCo handles them implicitly)
     for jname, jdef in skeleton.joints.items():
         if jdef.child_link == name:
+            if jdef.joint_type == "FixedJoint":
+                break  # No joint element needed
             jtype = _mujoco_type(jdef.joint_type)
             ja: dict[str, str] = {"name": jname, "type": jtype}
             if jtype in ("hinge", "slide"):
-                ax = jdef.axis
+                ax = list(jdef.axis)
+                # MuJoCo requires non-zero axis
+                if all(abs(v) < 1e-10 for v in ax):
+                    ax = [0.0, 0.0, 1.0]
                 ja["axis"] = f"{ax[0]:.6f} {ax[1]:.6f} {ax[2]:.6f}"
             lim = jdef.limits
             if math.isfinite(lim.lower) or math.isfinite(lim.upper):
                 lower = lim.lower if math.isfinite(lim.lower) else -3.14
                 upper = lim.upper if math.isfinite(lim.upper) else 3.14
-                ja["range"] = f"{lower:.6f} {upper:.6f}"
+                # Clamp to MuJoCo-safe range
+                lower = max(lower, -10000.0)
+                upper = min(upper, 10000.0)
+                if lower < upper - 1e-10:
+                    ja["range"] = f"{lower:.6f} {upper:.6f}"
             SubElement(body, "joint", ja)
             break
 

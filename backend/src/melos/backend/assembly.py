@@ -150,6 +150,7 @@ def resolve_assembly(
             "parameters": params,
             "attachments": attachments,
             "measurements": measurements,
+            "cable_ports": part_spec.get("cable_ports", []),
         })
 
     return {
