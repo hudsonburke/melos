@@ -420,3 +420,84 @@ def scale_by_landmarks_endpoint(req: ScaleByLandmarksRequest):
         "total_mass_after": report.total_mass_after,
         "warnings": report.warnings,
     }
+
+
+# ── MHR adapter endpoint ──────────────────────────────────────────────────
+
+from pydantic import BaseModel
+
+
+class MHRFitRequest(BaseModel):
+    identity_coeffs: list[float] | None = None
+    scale_params: list[float] | None = None
+    data_root: str | None = None
+    target_mass: float | None = None
+
+
+@app.post("/model/fit/mhr")
+def fit_from_mhr(req: MHRFitRequest) -> dict:
+    """Fit the skeleton to an MHR skin bundle.
+
+    Takes MHR identity parameters (from SAM 3D Body video processing),
+    loads the SOMA layer, extracts segment lengths, and scales the
+    loaded skeleton to match.
+    """
+    from melos.backend.mhr_adapter import load_mhr_bundle, scale_skeleton_from_mhr
+
+    if _model is None:
+        raise HTTPException(404, "No model loaded.")
+
+    bundle = load_mhr_bundle(
+        identity_coeffs=req.identity_coeffs,
+        scale_params=req.scale_params,
+        data_root=req.data_root,
+    )
+    if bundle is None:
+        raise HTTPException(500, "Failed to load MHR skin bundle (SOMA not available?)")
+
+    result = scale_skeleton_from_mhr(
+        _model.skeleton,
+        bundle,
+        target_mass=req.target_mass,
+    )
+
+    # Update the skeleton in place if scaling succeeded
+    if result.get("scale_report"):
+        from melos.backend.scaling import by_bone_vectors
+        # Re-run scaling (already done in scale_skeleton_from_mhr, but
+        # we need the updated skeleton state)
+        joint_to_link = {
+            "hip_r": "femur_r", "knee_r": "tibia_r",
+            "hip_l": "femur_l", "knee_l": "tibia_l",
+        }
+        mhr_joints = bundle.get("joints", {})
+        target_vectors = {}
+        hip_r = mhr_joints.get("RightLeg")
+        knee_r = mhr_joints.get("RightShin")
+        if hip_r and knee_r:
+            target_vectors["hip_r"] = (
+                (knee_r[0] - hip_r[0]) / 100.0,
+                (knee_r[1] - hip_r[1]) / 100.0,
+                (knee_r[2] - hip_r[2]) / 100.0,
+            )
+        hip_l = mhr_joints.get("LeftLeg")
+        knee_l = mhr_joints.get("LeftShin")
+        if hip_l and knee_l:
+            target_vectors["hip_l"] = (
+                (knee_l[0] - hip_l[0]) / 100.0,
+                (knee_l[1] - hip_l[1]) / 100.0,
+                (knee_l[2] - hip_l[2]) / 100.0,
+            )
+        if target_vectors:
+            from melos.backend.scaling import by_bone_vectors as scale_fn
+            report = scale_fn(_model.skeleton, target_vectors, joint_to_link,
+                              target_mass=req.target_mass)
+            _model.skeleton = report.scaled_skeleton
+            result["scale_report"] = {
+                "link_scale_factors": report.link_scale_factors,
+                "matched_segments": report.matched_segments,
+                "total_mass_before": report.total_mass_before,
+                "total_mass_after": report.total_mass_after,
+            }
+
+    return result
