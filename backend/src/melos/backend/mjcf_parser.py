@@ -62,19 +62,15 @@ def parse_mjcf(path: str | Path) -> SkeletonState:
         name = body_names[i]
 
         if i == 0:
-            # World body — skip, we use "ground" instead
-            parent_map["world"] = "ground"
-            transforms["world"] = LinkTransform(
-                translation=(0.0, 0.0, 0.0),
-                rotation=(1.0, 0.0, 0.0, 0.0),
-            )
-            links["world"] = LinkDef(name="world", mass=0.0, visible=False)
+            # World body — skip; its children become direct children of "ground"
+            # Don't add world to parent_map or transforms
             continue
 
         parent_id = body_parentid[i]
         parent_name = body_names[parent_id] if parent_id >= 0 else "ground"
         if parent_id == 0:
-            parent_name = "world"
+            # Children of MuJoCo's world body attach directly to "ground"
+            parent_name = "ground"
 
         # Position and rotation from body's fixed (i.e., joint-free) offset
         body = model.body(i)
@@ -169,6 +165,8 @@ def parse_mjcf(path: str | Path) -> SkeletonState:
 
     order = ["ground"]
     _walk_body(0, order)
+    # Remove world body (MuJoCo internal, not in links/transforms)
+    order = [n for n in order if n in transforms]
 
     # Ensure all named bodies are in order
     for name in body_names:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 from melos.backend.models import SkeletonState
@@ -14,26 +15,55 @@ def compile_skeleton(
     *,
     timestep: float = 0.01,
     gravity: list[float] | None = None,
+    meshdir: str | None = None,
 ) -> str:
     """Compile SkeletonState to MJCF XML string."""
     root = Element("mujoco", {"model": model_name})
     g = gravity or [0, 0, -9.81]
 
-    SubElement(root, "compiler", {
-        "angle": "radian", "meshdir": "meshes/", "balanceinertia": "true",
-    })
+    compiler_attrs: dict[str, str] = {
+        "angle": "radian",
+        "balanceinertia": "true",
+    }
+    if meshdir:
+        compiler_attrs["meshdir"] = meshdir
+    SubElement(root, "compiler", compiler_attrs)
     SubElement(root, "option", {
         "timestep": str(timestep),
         "gravity": f"{g[0]} {g[1]} {g[2]}",
         "integrator": "RK4",
     })
 
+    # Asset section — define meshes for MuJoCo to find (only if files exist)
+    asset = SubElement(root, "asset")
+    seen_meshes: set[str] = set()
+    for name, link in skeleton.links.items():
+        if link and link.graphics_file and meshdir:
+            mesh_name = link.graphics_file.replace(".stl", "").replace(".vtp", "")
+            if mesh_name not in seen_meshes:
+                # Check mesh file exists before adding
+                mesh_path = Path(meshdir) / link.graphics_file
+                if not mesh_path.exists():
+                    # Try with extensions
+                    found = False
+                    for ext in [".stl", ".STL", ".obj", ".vtp", ".ply"]:
+                        if (mesh_path.parent / (mesh_path.name + ext)).exists():
+                            found = True
+                            mesh_path = mesh_path.parent / (mesh_path.name + ext)
+                            break
+                    if not found:
+                        continue
+                SubElement(asset, "mesh", {
+                    "name": mesh_name,
+                    "file": str(mesh_path),
+                })
+                seen_meshes.add(mesh_name)
+
     worldbody = SubElement(root, "worldbody")
 
     all_children = set(skeleton.parent_map.keys())
     roots = [n for n in skeleton.order if n not in all_children and n in skeleton.transforms]
 
-    # Children map — computed once
     children_of: dict[str, list[str]] = {}
     for c, p in skeleton.parent_map.items():
         children_of.setdefault(p, []).append(c)
@@ -45,7 +75,7 @@ def compile_skeleton(
     })
 
     for root_name in roots:
-        _build_body(worldbody, skeleton, root_name, children_of)
+        _build_body(worldbody, skeleton, root_name, children_of, meshdir)
 
     # Actuators (position control on every joint)
     actuator = SubElement(root, "actuator")
@@ -62,6 +92,7 @@ def _build_body(
     skeleton: SkeletonState,
     name: str,
     children_of: dict[str, list[str]],
+    meshdir: str | None = None,
 ) -> None:
     """Recursively build body/joint/geom elements."""
     xf = skeleton.transforms.get(name)
@@ -71,8 +102,7 @@ def _build_body(
     pos = xf.translation if xf else (0, 0, 0)
     quat = xf.rotation if xf else (1, 0, 0, 0)
 
-    attrs: dict[str, str] = {"name": name}
-    attrs["pos"] = f"{pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}"
+    attrs: dict[str, str] = {"name": name, "pos": f"{pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}"}
     if quat != (1, 0, 0, 0):
         attrs["quat"] = f"{quat[0]:.6f} {quat[1]:.6f} {quat[2]:.6f} {quat[3]:.6f}"
 
@@ -105,17 +135,24 @@ def _build_body(
             SubElement(body, "joint", ja)
             break
 
-    # Mesh
-    if link and link.graphics_file:
-        SubElement(body, "geom", {
-            "type": "mesh",
-            "mesh": link.graphics_file.replace(".vtp", ""),
-            "rgba": "0.8 0.8 0.8 1",
-        })
+    # Mesh geometry — only if mesh file exists in meshdir
+    mesh_geom = None
+    if link and link.graphics_file and meshdir:
+        mesh_path = Path(meshdir) / link.graphics_file
+        # Try common extensions
+        for ext in ["", ".stl", ".STL", ".obj", ".OBJ", ".vtp", ".ply"]:
+            test_path = mesh_path.parent / (mesh_path.name + ext) if ext else mesh_path
+            if test_path.exists():
+                mesh_geom = SubElement(body, "geom", {
+                    "type": "mesh",
+                    "mesh": link.graphics_file.replace(".stl", "").replace(".vtp", ""),
+                    "rgba": "0.8 0.8 0.8 1",
+                })
+                break
 
     # Children
     for child in children:
-        _build_body(body, skeleton, child, children_of)
+        _build_body(body, skeleton, child, children_of, meshdir)
 
 
 def _mujoco_type(jt: str) -> str:
@@ -125,9 +162,7 @@ def _mujoco_type(jt: str) -> str:
 
 
 def _pretty_xml(root: Element) -> str:
-    """Render XML with proper indentation."""
     raw = tostring(root, encoding="unicode")
-    # ET doesn't indent by default — use minidom for proper formatting
     import xml.dom.minidom
     dom = xml.dom.minidom.parseString(raw.encode())
     return dom.toprettyxml(indent="  ")
