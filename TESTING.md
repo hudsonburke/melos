@@ -1,7 +1,8 @@
 # Melos — Test Guide
 
-Step-by-step instructions for testing each component of the subject-specific
-exoskeleton design pipeline, from simplest to full integration.
+The canonical data model lives in **`packages/melos-core/src/melos/core/model.py`**.
+All backend modules, the API, the frontend types, and the MJCF compiler/parser
+derive from this single Pydantic schema. To verify the contract: `ModelState.model_json_schema()`
 
 ## Prerequisites
 
