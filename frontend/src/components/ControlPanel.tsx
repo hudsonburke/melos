@@ -138,8 +138,19 @@ export default function ControlPanel(props: Props) {
 
       {/* ── Model ───────────────────────────────────────────────────── */}
       <h3>Model</h3>
-      <button style={btn()} onClick={loadModel}>📂 OSIM</button>
-      <button style={btn()} onClick={importMjcf}>📥 MJCF</button>
+      <button style={btn()} onClick={loadModel}>📂 OSIM (Rajagopal)</button>
+      <input style={input} placeholder="Custom model path..."
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            const p = (e.target as HTMLInputElement).value;
+            if (p) {
+              const isMjcf = p.endsWith(".xml") || p.endsWith(".mjcf");
+              api("POST", isMjcf ? `/model/import/mjcf?path=${encodeURIComponent(p)}` : `/model/load?path=${encodeURIComponent(p)}`)
+                .then((d) => { if (d) { flash(`Loaded: ${d.name}`); onModelReload(); } });
+            }
+          }
+        }} />
+      <button style={btn()} onClick={importMjcf}>📥 MJCF (MyoSuite)</button>
 
       {/* ── Transform ────────────────────────────────────────────────── */}
       <h3>Transform</h3>

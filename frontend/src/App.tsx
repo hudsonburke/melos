@@ -33,7 +33,7 @@ export default function App() {
         // Fetch model state, landmarks, and skin bundle in parallel
         const [modelRes, landmarksRes, skinRes] = await Promise.all([
           fetch(`${API_BASE}/model`),
-          fetch(`${API_BASE}/model/landmarks?set_name=gait_full_body`),
+          fetch(`${API_BASE}/model/landmarks`),
           fetch(`${API_BASE}/model/skin`),
         ]);
 
@@ -42,12 +42,13 @@ export default function App() {
           setModel(data);
         }
         if (landmarksRes.ok) {
-          const data = await landmarksRes.json();
-          setLandmarks(data.landmarks);
+          try {
+            const data = await landmarksRes.json();
+            if (data.landmarks) setLandmarks(data.landmarks);
+          } catch { /* no landmark set */ }
         }
         if (skinRes.ok) {
-          const data = await skinRes.json();
-          setSkinBundle(data);
+          try { setSkinBundle(await skinRes.json()); } catch { /* no skin */ }
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -62,16 +63,15 @@ export default function App() {
   }, []);
 
   const handleModelReload = async () => {
-    // Refetch model state, landmarks, and skin after changes
+    // Refetch model state after changes; landmarks/skin are optional
     try {
-      const [mr, lr, sr] = await Promise.all([
-        fetch(`${API_BASE}/model`),
-        fetch(`${API_BASE}/model/landmarks?set_name=gait_full_body`),
-        fetch(`${API_BASE}/model/skin`),
-      ]);
+      const mr = await fetch(`${API_BASE}/model`);
       if (mr.ok) setModel(await mr.json());
-      if (lr.ok) setLandmarks((await lr.json()).landmarks);
-      if (sr.ok) setSkinBundle(await sr.json());
+      // Only fetch landmarks if we have a matching marker set
+      try {
+        const lr = await fetch(`${API_BASE}/model/landmarks`);
+        if (lr.ok) setLandmarks((await lr.json()).landmarks);
+      } catch { /* no landmark set loaded */ }
     } catch (_) {}
   };
 
