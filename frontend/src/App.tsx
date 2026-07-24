@@ -3,6 +3,7 @@ import Scene from "./components/Scene";
 import ControlPanel from "./components/ControlPanel";
 import type { ModelState } from "./types/schema";
 import type { SkinBundle } from "./components/SkinnedBody";
+import "./App.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8008";
 
