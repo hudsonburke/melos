@@ -83,8 +83,7 @@ export default function App() {
             showSkin={showSkin} skinBundle={skinBundle} />
         }
       </div>
-      <div className="sidebar">
-        <ControlPanel
+      <ControlPanel
           model={model}
           selectedPath={selectedPath}
           apiBase={API_BASE}
@@ -101,7 +100,6 @@ export default function App() {
           }}
           onModelReload={handleModelReload}
         />
-      </div>
     </div>
   );
 }

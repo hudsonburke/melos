@@ -8,6 +8,15 @@
   overflow: hidden;
 }
 
+/* Override Vite default #root centering for full-viewport app */
+#root {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+}
+
 .viewport {
   flex: 1;
   height: 100vh;
