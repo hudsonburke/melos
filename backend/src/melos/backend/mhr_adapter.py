@@ -22,7 +22,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from melos.backend.models import SkeletonState
+from melos.core.model import SkeletonState
 from melos.backend.scaling import by_segment_lengths, compute_bone_positions
 
 logger = logging.getLogger(__name__)

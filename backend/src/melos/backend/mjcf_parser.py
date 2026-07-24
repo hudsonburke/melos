@@ -17,7 +17,7 @@ from typing import Any
 import mujoco
 import numpy as np
 
-from melos.backend.models import (
+from melos.core.model import (
     JointDef,
     JointLimits,
     LinkDef,

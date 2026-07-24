@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from xml.etree.ElementTree import Element, SubElement, tostring
 
-from melos.backend.models import SkeletonState
+from melos.core.model import SkeletonState
 
 
 def compile_skeleton(

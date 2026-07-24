@@ -15,7 +15,7 @@ import logging
 import math
 from typing import Any
 
-from melos.backend.models import (
+from melos.core.model import (
     JointDef,
     JointLimits,
     LinkDef,

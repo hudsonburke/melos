@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from melos.backend.models import (
+from melos.core.model import (
     JointDef,
     JointLimits,
     JointPatch,

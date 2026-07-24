@@ -22,7 +22,7 @@ import yaml
 from pathlib import Path
 from typing import Any
 
-from melos.backend.models import LinkTransform, SkeletonState
+from melos.core.model import LinkTransform, SkeletonState
 
 # ── Canonical landmark descriptor ─────────────────────────────────────────
 

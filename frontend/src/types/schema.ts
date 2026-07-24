@@ -1,45 +1,50 @@
 /**
- * TypeScript types mirroring the melos.rerun Arrow component schemas.
+ * Canonical Melos types — mirrors melos.core.model exactly.
  *
- * These are the canonical data types that both the Python backend
- * and React frontend share. The Python backend serializes Arrow structs
- * to JSON, and this frontend deserializes them to these types.
+ * Field names, nesting, and types MUST match the Pydantic schema.
+ * This is the single source of truth for the frontend.
  */
 
-/** Canonical joint definition (mirrors JOINT_DEFINITION Arrow struct) */
-export interface JointDefinition {
+export interface JointLimits {
+  lower: number;
+  upper: number;
+}
+
+export interface JointDef {
   joint_type: string;
-  axis: [number, number, number];
-  limits: { lower: number; upper: number };
+  axis: number[];
+  limits: JointLimits;
   parent_link: string;
   child_link: string;
   default_qpos: number;
 }
 
-/** Canonical link/body definition (mirrors LINK_DEFINITION Arrow struct) */
-export interface LinkDefinition {
+export interface LinkDef {
   name: string;
   mass: number;
-  center_of_mass: [number, number, number];
-  inertia: [number, number, number, number, number, number];
+  center_of_mass: number[];
+  inertia: number[];
   graphics_file: string;
   visible: boolean;
 }
 
-/** Spatial transform for a link */
 export interface LinkTransform {
   translation: [number, number, number];
   rotation: [number, number, number, number]; // (w, x, y, z)
 }
 
-/** Full skeleton state from the backend */
 export interface SkeletonState {
-  joints: Record<string, JointDefinition>;
-  links: Record<string, LinkDefinition>;
+  joints: Record<string, JointDef>;
+  links: Record<string, LinkDef>;
   transforms: Record<string, LinkTransform>;
-  parent_map: Record<string, string>; // child_name -> parent_name
-  order: string[];                     // parent-before-child topological order
-  descendants: Record<string, string[]>; // parent -> [child, grandchild, ...]
+  parent_map: Record<string, string>;
+  order: string[];
+  descendants: Record<string, string[]>;
+}
+
+export interface ModelState {
+  name: string;
+  skeleton: SkeletonState;
 }
 
 /** Subject measurements */
@@ -51,11 +56,4 @@ export interface BodyMeasurement {
   circumference: number;
   width: number;
   depth: number;
-}
-
-/** Complete model state returned by the backend */
-export interface ModelState {
-  name: string;
-  skeleton: SkeletonState;
-  subject?: BodyMeasurement[];
 }
