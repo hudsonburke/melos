@@ -47,8 +47,6 @@ _model: ModelState | None = None
 
 def load_model_from_osim(osim_path: str, prefix: str = "") -> ModelState:
     """Parse an OpenSim model and build a ModelState for the frontend."""
-    import rerun as rr
-    from melos.rerun.components import JointDefinitionBatch, LinkDefinitionBatch
     from rerun_importer_osim import parse_osim_model
 
     raw = parse_osim_model(osim_path)
