@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from melos.core.retarget.model import JointPositionSet, SegmentMeasurement, SegmentMeasurementSet
+from melos.core.retarget.model import SegmentMeasurement, SegmentMeasurementSet
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[6]
@@ -186,15 +186,6 @@ def build_example_target_joint_secondary_directions(
     return directions
 
 
-
-def build_example_target_joint_set(
-    world_transforms: dict[str, Any],
-) -> JointPositionSet:
-    return JointPositionSet(
-        positions=build_example_target_joint_positions(world_transforms),
-        space="world",
-        units="m",
-    )
 
 
 def build_example_scale_link_map() -> dict[str, tuple[str, ...]]:

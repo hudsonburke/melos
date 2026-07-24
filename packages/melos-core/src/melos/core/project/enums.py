@@ -24,9 +24,6 @@ class ConnectionKind(StrEnum):
 
     RIGID = "rigid"
     COMPLIANT = "compliant"
-    CONTACT_ONLY = "contact_only"
-    OBSERVATIONAL = "observational"
-    ALIGNMENT_ONLY = "alignment_only"
 
 
 class ConstraintPolicy(StrEnum):
@@ -34,8 +31,6 @@ class ConstraintPolicy(StrEnum):
 
     LOWER_TO_WELD = "lower_to_weld"
     LOWER_TO_SPRINGS = "lower_to_springs"
-    UPPER_TO_WELD = "upper_to_weld"
-    UPPER_TO_SPRINGS = "upper_to_springs"
 
 
 class AssetRole(StrEnum):

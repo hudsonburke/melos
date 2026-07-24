@@ -8,7 +8,6 @@ from melos.core.common.ids import Identifier
 from melos.core.common.types import AnnotationMap, Vec3, ZERO_VEC3
 from melos.core.common.units import ANGLE_UNIT, FORCE_UNIT, LENGTH_UNIT
 from .enums import MusclePathPointKind
-from .geometry import MuscleGeometry, MuscleSimulationHints
 
 
 @dataclass(slots=True, kw_only=True)
@@ -52,17 +51,12 @@ class MusclePath:
 class MuscleModel:
     """Top-level muscle actuator model.
 
-    The canonical definition is the physiology plus the ordered path. Optional
-    associated geometry can support visualization, fitting, or future
-    higher-fidelity volumetric representations without replacing the canonical
-    path-based definition.
+    The canonical definition is the physiology plus the ordered path.
     """
 
     id: Identifier
     name: str
     path: MusclePath = field(default_factory=MusclePath)
     physiology: MusclePhysiology | None = None
-    geometry: MuscleGeometry | None = None
-    simulation_hints: MuscleSimulationHints | None = None
     description: str = ""
     annotations: AnnotationMap = field(default_factory=dict)

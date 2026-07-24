@@ -6,10 +6,10 @@ Serves skeleton state to the R3F frontend and accepts edits.
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -174,13 +174,14 @@ def load_model_from_osim(osim_path: str, prefix: str = "") -> ModelState:
 
 def _euler_to_quat(x: float, y: float, z: float) -> tuple[float, float, float, float]:
     """Convert Euler XYZ (radians) to quaternion (w, x, y, z)."""
-    cx, cy, cz = np.cos(np.array([x, y, z]) / 2)
-    sx, sy, sz = np.sin(np.array([x, y, z]) / 2)
+    cx, sx = math.cos(x / 2), math.sin(x / 2)
+    cy, sy = math.cos(y / 2), math.sin(y / 2)
+    cz, sz = math.cos(z / 2), math.sin(z / 2)
     return (
-        float(cx * cy * cz + sx * sy * sz),  # w
-        float(sx * cy * cz - cx * sy * sz),  # x
-        float(cx * sy * cz + sx * cy * sz),  # y
-        float(cx * cy * sz - sx * sy * cz),  # z
+        cx * cy * cz + sx * sy * sz,  # w
+        sx * cy * cz - cx * sy * sz,  # x
+        cx * sy * cz + sx * cy * sz,  # y
+        cx * cy * sz - sx * sy * cz,  # z
     )
 
 

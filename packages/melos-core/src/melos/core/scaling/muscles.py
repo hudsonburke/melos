@@ -113,8 +113,6 @@ def scale_muscles(
                 name=muscle.name,
                 path=scaled_path,
                 physiology=scaled_physiology,
-                geometry=muscle.geometry,
-                simulation_hints=muscle.simulation_hints,
                 description=muscle.description,
                 annotations=muscle.annotations,
             )
