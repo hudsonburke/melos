@@ -57,6 +57,20 @@ export default function App() {
     loadModel();
   }, []);
 
+  const handleModelReload = async () => {
+    // Refetch model state, landmarks, and skin after changes
+    try {
+      const [mr, lr, sr] = await Promise.all([
+        fetch(`${API_BASE}/model`),
+        fetch(`${API_BASE}/model/landmarks?set_name=gait_full_body`),
+        fetch(`${API_BASE}/model/skin`),
+      ]);
+      if (mr.ok) setModel(await mr.json());
+      if (lr.ok) setLandmarks((await lr.json()).landmarks);
+      if (sr.ok) setSkinBundle(await sr.json());
+    } catch (_) {}
+  };
+
   return (
     <div className="app-layout">
       <div className="viewport">
@@ -80,11 +94,11 @@ export default function App() {
           showSkin={showSkin}
           onSkinToggle={() => {
             if (!skinBundle) {
-              // Try fetching on first toggle
               fetch(`${API_BASE}/model/skin`).then(r => r.json()).then(setSkinBundle).catch(() => {});
             }
             setShowSkin(!showSkin);
           }}
+          onModelReload={handleModelReload}
         />
       </div>
     </div>
