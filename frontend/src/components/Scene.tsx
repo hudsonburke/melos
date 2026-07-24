@@ -33,7 +33,7 @@ interface SceneProps {
 export default function Scene({ model, onSelect, selected, apiBase, transformMode, showLandmarks, landmarks, showSkin, skinBundle }: SceneProps) {
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
-      <Canvas camera={{ position: [2, 2, 3], fov: 50 }} style={{ background: "#1a1a1a" }}>
+      <Canvas camera={{ position: [2.5, 1.5, 3], fov: 45 }} style={{ background: "#1a1a1a" }}>
         <ambientLight intensity={0.4} />
         <directionalLight position={[5, 10, 5]} intensity={0.8} />
         <directionalLight position={[-3, -2, -5]} intensity={0.3} />
@@ -61,7 +61,9 @@ export default function Scene({ model, onSelect, selected, apiBase, transformMod
 function useChildrenOf(pm: Record<string, string>): Record<string, string[]> {
   return useMemo(() => {
     const m: Record<string, string[]> = {};
-    for (const [c, p] of Object.entries(pm)) (m[p] ??= []).push(c);
+    for (const [c, p] of Object.entries(pm)) {
+      (m[p] ??= []).push(c);
+    }
     return m;
   }, [pm]);
 }
@@ -101,7 +103,7 @@ function SkeletonRenderer({ skeleton, selected, onSelect, apiBase, transformMode
         <LinkGroup key={name} name={name} skeleton={skeleton} childrenOf={childrenOf}
           selected={selected} onSelect={onSelect} apiBase={apiBase}
           transformMode={transformMode}
-          showLandmarks={showLandmarks} linkLandmarks={linkLandmarks[name] || []} />
+          showLandmarks={showLandmarks} landmarksByLink={linkLandmarks} />
       ))}
       {Object.entries(skeleton.parent_map).map(([child, parent]) => {
         const c = worldPoses.get(child);
@@ -121,6 +123,7 @@ function computeBonePositions(s: SkeletonState): Map<string, THREE.Vector3> {
   for (const name of order) {
     const xf = s.transforms[name];
     const pos = xf ? new THREE.Vector3(xf.translation[0], xf.translation[1], xf.translation[2]) : new THREE.Vector3();
+    // Backend stores quats as (w,x,y,z); THREE.Quaternion() expects (x,y,z,w)
     const q = xf ? new THREE.Quaternion(xf.rotation[1], xf.rotation[2], xf.rotation[3], xf.rotation[0]) : new THREE.Quaternion();
     const pn = s.parent_map[name];
     if (pn) { const pp = m.get(pn); if (pp) { pos.applyQuaternion(q); pos.add(pp); } }
@@ -152,7 +155,7 @@ function LandmarkDot({ name }: { name: string }) {
 
 function LinkGroup({
   name, skeleton, childrenOf, selected, onSelect, apiBase, transformMode,
-  showLandmarks, linkLandmarks,
+  showLandmarks, landmarksByLink,
 }: {
   name: string;
   skeleton: SkeletonState;
@@ -162,7 +165,7 @@ function LinkGroup({
   apiBase: string;
   transformMode: "translate" | "rotate";
   showLandmarks: boolean;
-  linkLandmarks: { name: string; offset: [number, number, number] }[];
+  landmarksByLink: Record<string, { name: string; offset: [number, number, number] }[]>;
 }) {
   const [hovered, setHovered] = useState(false);
   const [meshReady, setMeshReady] = useState(false);
@@ -173,6 +176,7 @@ function LinkGroup({
   const link = skeleton.links[name];
   const children = childrenOf[name] || [];
   const isSelected = selected === name;
+  const linkLandmarks = landmarksByLink[name] || [];
 
   if (!link?.visible) {
     return (
@@ -180,7 +184,7 @@ function LinkGroup({
         {children.map((c) => (
           <LinkGroup key={c} name={c} skeleton={skeleton} childrenOf={childrenOf}
             selected={selected} onSelect={onSelect} apiBase={apiBase} transformMode={transformMode}
-            showLandmarks={showLandmarks} linkLandmarks={linkLandmarks} />
+            showLandmarks={showLandmarks} landmarksByLink={landmarksByLink} />
         ))}
       </group>
     );
@@ -218,7 +222,7 @@ function LinkGroup({
         <TransformControls object={meshRef.current!} mode={transformMode} onMouseUp={handleDragEnd} />
       )}
 
-      <Box ref={refCb} args={[0.08 * s, 0.08 * s, 0.08 * s]}
+      <Box ref={refCb} args={[0.14 * s, 0.14 * s, 0.14 * s]}
         onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
         onPointerOut={() => setHovered(false)}
         onClick={(e) => { e.stopPropagation(); onSelect(isSelected ? null : name); }}>
@@ -235,7 +239,7 @@ function LinkGroup({
       {children.map((c) => (
         <LinkGroup key={c} name={c} skeleton={skeleton} childrenOf={childrenOf}
           selected={selected} onSelect={onSelect} apiBase={apiBase} transformMode={transformMode}
-          showLandmarks={showLandmarks} linkLandmarks={[]} />
+          showLandmarks={showLandmarks} landmarksByLink={landmarksByLink} />
       ))}
     </group>
   );

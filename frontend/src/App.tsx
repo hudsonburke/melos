@@ -16,6 +16,7 @@ export default function App() {
   const [showSkin, setShowSkin] = useState(false);
   const [skinBundle, setSkinBundle] = useState<SkinBundle | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Load model from the Python backend
   useEffect(() => {
@@ -49,7 +50,9 @@ export default function App() {
           setSkinBundle(data);
         }
       } catch (e) {
-        console.warn("Backend not available, using demo data", e);
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("Model load failed:", msg, e);
+        setLoadError(msg);
         setModel(createDemoModel());
       } finally {
         setLoading(false);
@@ -77,10 +80,13 @@ export default function App() {
       <div className="viewport">
         {loading
           ? <div className="loading">Loading model...</div>
-          : <Scene model={model} onSelect={setSelectedPath} selected={selectedPath}
-            apiBase={API_BASE} transformMode={transformMode}
-            showLandmarks={showLandmarks} landmarks={landmarks}
-            showSkin={showSkin} skinBundle={skinBundle} />
+          : <>
+            {loadError && <div className="error-banner">⚠ {loadError} — showing demo</div>}
+            <Scene model={model} onSelect={setSelectedPath} selected={selectedPath}
+              apiBase={API_BASE} transformMode={transformMode}
+              showLandmarks={showLandmarks} landmarks={landmarks}
+              showSkin={showSkin} skinBundle={skinBundle} />
+          </>
         }
       </div>
       <ControlPanel
