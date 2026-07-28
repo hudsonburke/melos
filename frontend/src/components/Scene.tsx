@@ -1,36 +1,19 @@
 import { useState, useRef, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
-import {
-  OrbitControls,
-  TransformControls,
-  Grid,
-  Box,
-  Line,
-  Sphere,
-  Text,
-} from "@react-three/drei";
+import { OrbitControls, Grid, Box, Line, Sphere } from "@react-three/drei";
 import * as THREE from "three";
-import type { ModelState, SkeletonState } from "../types/schema";
-import type { SkinBundle } from "./SkinnedBody";
-import SkinnedBody from "./SkinnedBody";
-
-type LandmarkData = Record<string, { link: string; offset: [number, number, number] }>;
+import type { Scene as SceneData, BodyInfo, JointInfo, SiteInfo, MeshInfo } from "../types/schema";
 
 // ── Scene ────────────────────────────────────────────────────────────────
 
 interface SceneProps {
-  model: ModelState | null;
-  onSelect: (ep: string | null) => void;
-  selected: string | null;
-  apiBase: string;
-  transformMode: "translate" | "rotate";
-  showLandmarks: boolean;
-  landmarks: LandmarkData | null;
-  showSkin: boolean;
-  skinBundle: SkinBundle | null;
+  scene: SceneData | null;
+  onSelect: (id: number | null) => void;
+  selected: number | null;
+  showSites: boolean;
 }
 
-export default function Scene({ model, onSelect, selected, apiBase, transformMode, showLandmarks, landmarks, showSkin, skinBundle }: SceneProps) {
+export default function Scene({ scene, onSelect, selected, showSites }: SceneProps) {
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <Canvas camera={{ position: [2.5, 1.5, 3], fov: 45 }} style={{ background: "#1a1a1a" }}>
@@ -39,208 +22,210 @@ export default function Scene({ model, onSelect, selected, apiBase, transformMod
         <directionalLight position={[-3, -2, -5]} intensity={0.3} />
         <Grid infiniteGrid />
         <OrbitControls makeDefault />
-        {model && (
-          <>
-            <SkeletonRenderer
-              skeleton={model.skeleton} selected={selected} onSelect={onSelect}
-              apiBase={apiBase} transformMode={transformMode}
-              showLandmarks={showLandmarks} landmarks={landmarks}
-            />
-            {showSkin && skinBundle && (
-              <SkinnedBody bundle={skinBundle} />
-            )}
-          </>
+        {scene && (
+          <ModelRenderer scene={scene} selected={selected} onSelect={onSelect} showSites={showSites} />
         )}
       </Canvas>
     </div>
   );
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────
+// ── Model renderer ────────────────────────────────────────────────────────
 
-function useChildrenOf(pm: Record<string, string>): Record<string, string[]> {
-  return useMemo(() => {
-    const m: Record<string, string[]> = {};
-    for (const [c, p] of Object.entries(pm)) {
-      (m[p] ??= []).push(c);
+function ModelRenderer({ scene, selected, onSelect, showSites }: {
+  scene: SceneData;
+  selected: number | null;
+  onSelect: (id: number | null) => void;
+  showSites: boolean;
+}) {
+  const bodyMap = useMemo(() => {
+    const m = new Map<number, BodyInfo>();
+    for (const b of scene.bodies) m.set(b.id, b);
+    return m;
+  }, [scene.bodies]);
+
+  const childrenMap = useMemo(() => {
+    const m = new Map<number, number[]>();
+    for (const b of scene.bodies) {
+      const key = b.parent_id ?? 0;
+      if (!m.has(key)) m.set(key, []);
+      m.get(key)!.push(b.id);
     }
     return m;
-  }, [pm]);
-}
+  }, [scene.bodies]);
 
-// ── Skeleton renderer ────────────────────────────────────────────────────
+  const jointByChild = useMemo(() => {
+    const m = new Map<number, JointInfo>();
+    for (const j of scene.joints) m.set(j.body_b, j);
+    return m;
+  }, [scene.joints]);
 
-interface SRProps {
-  skeleton: SkeletonState;
-  selected: string | null;
-  onSelect: (p: string | null) => void;
-  apiBase: string;
-  transformMode: "translate" | "rotate";
-  showLandmarks: boolean;
-  landmarks: LandmarkData | null;
-}
-
-function SkeletonRenderer({ skeleton, selected, onSelect, apiBase, transformMode, showLandmarks, landmarks }: SRProps) {
-  const childrenOf = useChildrenOf(skeleton.parent_map);
-  const allChildren = useMemo(() => new Set(Object.keys(skeleton.parent_map)), [skeleton.parent_map]);
-  const roots = skeleton.order.filter((n) => !allChildren.has(n));
-  const worldPoses = useMemo(() => computeBonePositions(skeleton), [skeleton]);
-
-  // Build per-link landmark list
-  const linkLandmarks = useMemo(() => {
-    const ll: Record<string, { name: string; offset: [number, number, number] }[]> = {};
-    if (!landmarks) return ll;
-    for (const [name, def] of Object.entries(landmarks)) {
-      if (!def.link) continue;
-      (ll[def.link] ??= []).push({ name, offset: def.offset });
+  const meshesByBody = useMemo(() => {
+    const m = new Map<number, MeshInfo[]>();
+    for (const mesh of scene.meshes) {
+      if (!m.has(mesh.parent)) m.set(mesh.parent, []);
+      m.get(mesh.parent)!.push(mesh);
     }
-    return ll;
-  }, [landmarks]);
+    return m;
+  }, [scene.meshes]);
+
+  const sitesByBody = useMemo(() => {
+    const m = new Map<number, SiteInfo[]>();
+    for (const s of scene.sites) {
+      if (!m.has(s.parent)) m.set(s.parent, []);
+      m.get(s.parent)!.push(s);
+    }
+    return m;
+  }, [scene.sites]);
+
+  const roots = useMemo(() => {
+    return scene.bodies.filter(b => b.parent_id === null).map(b => b.id);
+  }, [scene.bodies]);
+
+  const worldPoses = useMemo(() => computeWorldPositions(scene), [scene]);
 
   return (
     <group>
-      {roots.map((name) => (
-        <LinkGroup key={name} name={name} skeleton={skeleton} childrenOf={childrenOf}
-          selected={selected} onSelect={onSelect} apiBase={apiBase}
-          transformMode={transformMode}
-          showLandmarks={showLandmarks} landmarksByLink={linkLandmarks} />
+      {roots.map(id => (
+        <BodyGroup key={id} bodyId={id} bodyMap={bodyMap} childrenMap={childrenMap}
+          jointByChild={jointByChild} meshesByBody={meshesByBody} sitesByBody={sitesByBody}
+          selected={selected} onSelect={onSelect} showSites={showSites} />
       ))}
-      {Object.entries(skeleton.parent_map).map(([child, parent]) => {
-        const c = worldPoses.get(child);
-        const p = worldPoses.get(parent);
-        if (!c || !p) return null;
-        return <Line key={`b:${parent}-${child}`} points={[p, c]} color="#666" lineWidth={1} />;
+      {scene.joints.map(j => {
+        const p = worldPoses.get(j.body_a);
+        const c = worldPoses.get(j.body_b);
+        if (!p || !c) return null;
+        return <Line key={`joint:${j.id}`} points={[p, c]} color="#666" lineWidth={1} />;
       })}
     </group>
   );
 }
 
-// ── Bone positions ───────────────────────────────────────────────────────
+// ── Body group ────────────────────────────────────────────────────────────
 
-function computeBonePositions(s: SkeletonState): Map<string, THREE.Vector3> {
-  const m = new Map<string, THREE.Vector3>();
-  const order = s.order.length ? s.order : Object.keys(s.parent_map);
-  for (const name of order) {
-    const xf = s.transforms[name];
-    const pos = xf ? new THREE.Vector3(xf.translation[0], xf.translation[1], xf.translation[2]) : new THREE.Vector3();
-    // Backend stores quats as (w,x,y,z); THREE.Quaternion() expects (x,y,z,w)
-    const q = xf ? new THREE.Quaternion(xf.rotation[1], xf.rotation[2], xf.rotation[3], xf.rotation[0]) : new THREE.Quaternion();
-    const pn = s.parent_map[name];
-    if (pn) { const pp = m.get(pn); if (pp) { pos.applyQuaternion(q); pos.add(pp); } }
-    m.set(name, pos);
-  }
-  return m;
-}
-
-// ── Landmark dot ─────────────────────────────────────────────────────────
-
-function LandmarkDot({ name }: { name: string }) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <group>
-      <Sphere args={[0.015, 8, 8]}
-        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
-        onPointerOut={() => setHovered(false)}>
-        <meshStandardMaterial color={hovered ? "#ffff00" : "#ff4444"}
-          emissive={hovered ? "#ffff00" : "#ff4444"} emissiveIntensity={0.3} />
-      </Sphere>
-      {hovered && (
-        <Text position={[0, 0.04, 0]} fontSize={0.03} color="white" anchorX="center" anchorY="bottom">{name}</Text>
-      )}
-    </group>
-  );
-}
-
-// ── Link group ───────────────────────────────────────────────────────────
-
-function LinkGroup({
-  name, skeleton, childrenOf, selected, onSelect, apiBase, transformMode,
-  showLandmarks, landmarksByLink,
-}: {
-  name: string;
-  skeleton: SkeletonState;
-  childrenOf: Record<string, string[]>;
-  selected: string | null;
-  onSelect: (p: string | null) => void;
-  apiBase: string;
-  transformMode: "translate" | "rotate";
-  showLandmarks: boolean;
-  landmarksByLink: Record<string, { name: string; offset: [number, number, number] }[]>;
+function BodyGroup({ bodyId, bodyMap, childrenMap, jointByChild, meshesByBody, sitesByBody, selected, onSelect, showSites }: {
+  bodyId: number;
+  bodyMap: Map<number, BodyInfo>;
+  childrenMap: Map<number, number[]>;
+  jointByChild: Map<number, JointInfo>;
+  meshesByBody: Map<number, MeshInfo[]>;
+  sitesByBody: Map<number, SiteInfo[]>;
+  selected: number | null;
+  onSelect: (id: number | null) => void;
+  showSites: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
-  const [meshReady, setMeshReady] = useState(false);
   const groupRef = useRef<THREE.Group>(null);
-  const meshRef = useRef<THREE.Mesh>(null);
 
-  const xf = skeleton.transforms[name];
-  const link = skeleton.links[name];
-  const children = childrenOf[name] || [];
-  const isSelected = selected === name;
-  const linkLandmarks = landmarksByLink[name] || [];
+  const body = bodyMap.get(bodyId);
+  if (!body) return null;
 
-  if (!link?.visible) {
-    return (
-      <group ref={groupRef}>
-        {children.map((c) => (
-          <LinkGroup key={c} name={c} skeleton={skeleton} childrenOf={childrenOf}
-            selected={selected} onSelect={onSelect} apiBase={apiBase} transformMode={transformMode}
-            showLandmarks={showLandmarks} landmarksByLink={landmarksByLink} />
-        ))}
-      </group>
-    );
-  }
-
+  const isSelected = selected === bodyId;
   const color = isSelected ? "#ff6600" : hovered ? "#44aaff" : "#3399ff";
-  const s = isSelected ? 1.5 : hovered ? 1.2 : 1.0;
+  const scale = isSelected ? 1.5 : hovered ? 1.2 : 1.0;
+  const children = childrenMap.get(bodyId) || [];
+  const meshes = meshesByBody.get(bodyId) || [];
+  const sites = sitesByBody.get(bodyId) || [];
 
-  const handleDragEnd = async () => {
-    if (!groupRef.current) return;
-    const p = groupRef.current.position;
-    const q = groupRef.current.quaternion;
-    try {
-      await fetch(`${apiBase}/model/skeleton/transforms/${name}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ translation: [p.x, p.y, p.z], rotation: [q.w, q.x, q.y, q.z] }),
-      });
-    } catch (_) {}
-  };
-
-  const refCb = (node: THREE.Mesh | null) => {
-    meshRef.current = node;
-    if (node) setMeshReady(true);
-  };
-
-  const t = xf?.translation ?? [0, 0, 0];
-  const r = xf?.rotation ?? [1, 0, 0, 0];
+  const t = body.transform.translation;
+  const r = body.transform.rotation;
 
   return (
     <group ref={groupRef} position={new THREE.Vector3(t[0], t[1], t[2])}
       quaternion={new THREE.Quaternion(r[1], r[2], r[3], r[0])}>
 
-      {isSelected && meshReady && (
-        <TransformControls object={meshRef.current!} mode={transformMode} onMouseUp={handleDragEnd} />
+      {/* Body visualization */}
+      {meshes.length > 0 ? (
+        meshes.map(mesh => (
+          <group key={mesh.id} position={new THREE.Vector3(mesh.offset[0], mesh.offset[1], mesh.offset[2])}>
+            <Box args={[0.08 * scale, 0.08 * scale, 0.08 * scale]}
+              onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
+              onPointerOut={() => setHovered(false)}
+              onClick={(e) => { e.stopPropagation(); onSelect(isSelected ? null : bodyId); }}>
+              <meshStandardMaterial color={color} transparent opacity={0.85} />
+            </Box>
+          </group>
+        ))
+      ) : (
+        <Box args={[0.14 * scale, 0.14 * scale, 0.14 * scale]}
+          onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
+          onPointerOut={() => setHovered(false)}
+          onClick={(e) => { e.stopPropagation(); onSelect(isSelected ? null : bodyId); }}>
+          <meshStandardMaterial color={color} transparent opacity={0.85} />
+        </Box>
       )}
 
-      <Box ref={refCb} args={[0.14 * s, 0.14 * s, 0.14 * s]}
-        onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
-        onPointerOut={() => setHovered(false)}
-        onClick={(e) => { e.stopPropagation(); onSelect(isSelected ? null : name); }}>
-        <meshStandardMaterial color={color} transparent opacity={0.85} />
-      </Box>
-
-      {/* Landmarks attached to this link — rendered inside the link's local frame */}
-      {showLandmarks && linkLandmarks.map((lm) => (
-        <group key={lm.name} position={new THREE.Vector3(lm.offset[0], lm.offset[1], lm.offset[2])}>
-          <LandmarkDot name={lm.name} />
+      {/* Sites */}
+      {showSites && sites.map(site => (
+        <group key={site.id} position={new THREE.Vector3(site.offset[0], site.offset[1], site.offset[2])}>
+          <Sphere args={[0.005, 6, 6]}>
+            <meshStandardMaterial color="#ff4444" emissive="#ff4444" emissiveIntensity={0.3} />
+          </Sphere>
         </group>
       ))}
 
-      {children.map((c) => (
-        <LinkGroup key={c} name={c} skeleton={skeleton} childrenOf={childrenOf}
-          selected={selected} onSelect={onSelect} apiBase={apiBase} transformMode={transformMode}
-          showLandmarks={showLandmarks} landmarksByLink={landmarksByLink} />
+      {/* Joint indicator */}
+      {jointByChild.has(bodyId) && (
+        <Sphere args={[0.02, 8, 8]}>
+          <meshStandardMaterial color="#00ff00" transparent opacity={0.5} />
+        </Sphere>
+      )}
+
+      {/* Children */}
+      {children.map(id => (
+        <BodyGroup key={id} bodyId={id} bodyMap={bodyMap} childrenMap={childrenMap}
+          jointByChild={jointByChild} meshesByBody={meshesByBody} sitesByBody={sitesByBody}
+          selected={selected} onSelect={onSelect} showSites={showSites} />
       ))}
     </group>
   );
+}
+
+// ── World positions ────────────────────────────────────────────────────────
+
+function computeWorldPositions(scene: SceneData): Map<number, THREE.Vector3> {
+  const m = new Map<number, THREE.Vector3>();
+  const bodyMap = new Map<number, BodyInfo>();
+  for (const b of scene.bodies) bodyMap.set(b.id, b);
+
+  const visited = new Set<number>();
+  const queue: number[] = [];
+
+  for (const b of scene.bodies) {
+    if (b.parent_id === null) {
+      queue.push(b.id);
+      visited.add(b.id);
+    }
+  }
+
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    const body = bodyMap.get(id);
+    if (!body) continue;
+
+    const t = body.transform.translation;
+    const r = body.transform.rotation;
+    const pos = new THREE.Vector3(t[0], t[1], t[2]);
+    const quat = new THREE.Quaternion(r[1], r[2], r[3], r[0]);
+
+    const parentId = body.parent_id;
+    if (parentId !== null && parentId !== 0) {
+      const parentPos = m.get(parentId);
+      if (parentPos) {
+        pos.applyQuaternion(quat);
+        pos.add(parentPos);
+      }
+    }
+
+    m.set(id, pos);
+
+    for (const b of scene.bodies) {
+      if (b.parent_id === id && !visited.has(b.id)) {
+        visited.add(b.id);
+        queue.push(b.id);
+      }
+    }
+  }
+
+  return m;
 }

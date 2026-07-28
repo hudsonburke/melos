@@ -1,181 +1,104 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Scene from "./components/Scene";
 import ControlPanel from "./components/ControlPanel";
-import type { ModelState } from "./types/schema";
-import type { SkinBundle } from "./components/SkinnedBody";
+import type { Scene as SceneData } from "./types/schema";
 import "./App.css";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8008";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3000";
 
 export default function App() {
-  const [model, setModel] = useState<ModelState | null>(null);
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [scene, setScene] = useState<SceneData | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [transformMode, setTransformMode] = useState<"translate" | "rotate">("translate");
-  const [showLandmarks, setShowLandmarks] = useState(false);
-  const [landmarks, setLandmarks] = useState<Record<string, { link: string; offset: [number, number, number] }> | null>(null);
-  const [showSkin, setShowSkin] = useState(false);
-  const [skinBundle, setSkinBundle] = useState<SkinBundle | null>(null);
+  const [showSites, setShowSites] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Load model from the Python backend
-  useEffect(() => {
-    async function loadModel() {
-      try {
-        const loadRes = await fetch(
-          `${API_BASE}/model/load?path=/var/lib/hermes/rerun-importer-osim/test_data/RajagopalData/Rajagopal2015.osim`,
-          { method: "POST" }
-        );
-        if (!loadRes.ok) {
-          throw new Error(`Load failed: ${loadRes.status}`);
-        }
-
-        // Fetch model state, landmarks, and skin bundle in parallel
-        const [modelRes, landmarksRes, skinRes] = await Promise.all([
-          fetch(`${API_BASE}/model`),
-          fetch(`${API_BASE}/model/landmarks`),
-          fetch(`${API_BASE}/model/skin`),
-        ]);
-
-        if (modelRes.ok) {
-          const data = await modelRes.json();
-          setModel(data);
-        }
-        if (landmarksRes.ok) {
-          try {
-            const data = await landmarksRes.json();
-            if (data.landmarks) setLandmarks(data.landmarks);
-          } catch { /* no landmark set */ }
-        }
-        if (skinRes.ok) {
-          try { setSkinBundle(await skinRes.json()); } catch { /* no skin */ }
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.error("Model load failed:", msg, e);
-        setLoadError(msg);
-        setModel(createDemoModel());
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadModel();
-  }, []);
-
-  const handleModelReload = async () => {
-    // Refetch model state after changes; landmarks/skin are optional
+  const fetchScene = useCallback(async () => {
     try {
-      const mr = await fetch(`${API_BASE}/model`);
-      if (mr.ok) setModel(await mr.json());
-      // Only fetch landmarks if we have a matching marker set
-      try {
-        const lr = await fetch(`${API_BASE}/model/landmarks`);
-        if (lr.ok) setLandmarks((await lr.json()).landmarks);
-      } catch { /* no landmark set loaded */ }
-    } catch (_) {}
+      const res = await fetch(`${API_BASE}/scene`);
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const data: SceneData = await res.json();
+      setScene(data);
+      setError(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      if (!scene) setScene(createDemoScene());
+    } finally {
+      setLoading(false);
+    }
+  }, [scene]);
+
+  useEffect(() => {
+    fetchScene();
+    const interval = setInterval(fetchScene, 2000);
+    return () => clearInterval(interval);
+  }, [fetchScene]);
+
+  const handleImport = async (path: string, format: string) => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path, format }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || `Import failed: ${res.status}`);
+      }
+      await fetchScene();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="app-layout">
       <div className="viewport">
-        {loading
-          ? <div className="loading">Loading model...</div>
-          : <>
-            {loadError && <div className="error-banner">⚠ {loadError} — showing demo</div>}
-            <Scene model={model} onSelect={setSelectedPath} selected={selectedPath}
-              apiBase={API_BASE} transformMode={transformMode}
-              showLandmarks={showLandmarks} landmarks={landmarks}
-              showSkin={showSkin} skinBundle={skinBundle} />
+        {loading && !scene ? (
+          <div className="loading">Loading model...</div>
+        ) : (
+          <>
+            {error && <div className="error-banner">⚠ {error}</div>}
+            <Scene scene={scene} onSelect={setSelectedId} selected={selectedId} showSites={showSites} />
           </>
-        }
+        )}
       </div>
       <ControlPanel
-          model={model}
-          selectedPath={selectedPath}
-          apiBase={API_BASE}
-          transformMode={transformMode}
-          onModeChange={setTransformMode}
-          showLandmarks={showLandmarks}
-          onLandmarkToggle={() => setShowLandmarks(!showLandmarks)}
-          showSkin={showSkin}
-          onSkinToggle={() => {
-            if (!skinBundle) {
-              fetch(`${API_BASE}/model/skin`).then(r => r.json()).then(setSkinBundle).catch(() => {});
-            }
-            setShowSkin(!showSkin);
-          }}
-          onModelReload={handleModelReload}
-        />
+        scene={scene}
+        selectedId={selectedId}
+        transformMode={transformMode}
+        onModeChange={setTransformMode}
+        showSites={showSites}
+        onSiteToggle={() => setShowSites(!showSites)}
+        onImport={handleImport}
+        onRefresh={fetchScene}
+      />
     </div>
   );
 }
 
-function createDemoModel(): ModelState {
+function createDemoScene(): SceneData {
   return {
-    name: "Rajagopal2015 (demo)",
-    skeleton: {
-      joints: {
-        ground_pelvis: {
-          joint_type: "CustomJoint",
-          axis: [0, 0, 1],
-          limits: { lower: -1.57, upper: 1.57 },
-          parent_link: "ground",
-          child_link: "pelvis",
-          default_qpos: 0,
-        },
-        hip_r: {
-          joint_type: "CustomJoint",
-          axis: [0, 0, 0],
-          limits: { lower: -0.52, upper: 2.09 },
-          parent_link: "pelvis",
-          child_link: "femur_r",
-          default_qpos: 0,
-        },
-        knee_r: {
-          joint_type: "CustomJoint",
-          axis: [0, 0, 0],
-          limits: { lower: 0.0, upper: 2.09 },
-          parent_link: "femur_r",
-          child_link: "tibia_r",
-          default_qpos: 0,
-        },
-        ankle_r: {
-          joint_type: "PinJoint",
-          axis: [0, 0, 1],
-          limits: { lower: -0.70, upper: 0.52 },
-          parent_link: "tibia_r",
-          child_link: "talus_r",
-          default_qpos: 0,
-        },
-      },
-      links: {
-        pelvis: { name: "pelvis", mass: 11.78, center_of_mass: [0, 0, 0], inertia: [0,0,0,0,0,0], graphics_file: "pelvis.vtp", visible: true },
-        femur_r: { name: "femur_r", mass: 9.3, center_of_mass: [0, 0, -0.17], inertia: [0,0,0,0,0,0], graphics_file: "femur.vtp", visible: true },
-        tibia_r: { name: "tibia_r", mass: 3.71, center_of_mass: [0, 0, -0.18], inertia: [0,0,0,0,0,0], graphics_file: "tibia.vtp", visible: true },
-        talus_r: { name: "talus_r", mass: 0.1, center_of_mass: [0, 0, 0], inertia: [0,0,0,0,0,0], graphics_file: "talus.vtp", visible: true },
-        ground: { name: "ground", mass: 0, center_of_mass: [0, 0, 0], inertia: [0,0,0,0,0,0], graphics_file: "", visible: false },
-      },
-      transforms: {
-        pelvis: { translation: [0, 0, 0.85], rotation: [1, 0, 0, 0] },
-        femur_r: { translation: [0.08, -0.1, -0.07], rotation: [1, 0, 0, 0] },
-        tibia_r: { translation: [0, 0, -0.42], rotation: [1, 0, 0, 0] },
-        talus_r: { translation: [0.02, 0, -0.4], rotation: [1, 0, 0, 0] },
-        ground: { translation: [0, 0, 0], rotation: [1, 0, 0, 0] },
-      },
-      parent_map: {
-        pelvis: "ground",
-        femur_r: "pelvis",
-        tibia_r: "femur_r",
-        talus_r: "tibia_r",
-      },
-      order: ["ground", "pelvis", "femur_r", "tibia_r", "talus_r"],
-      descendants: {
-        ground: ["ground", "pelvis", "femur_r", "tibia_r", "talus_r"],
-        pelvis: ["pelvis", "femur_r", "tibia_r", "talus_r"],
-        femur_r: ["femur_r", "tibia_r", "talus_r"],
-        tibia_r: ["tibia_r", "talus_r"],
-        talus_r: ["talus_r"],
-      },
-    },
+    num_entities: 6,
+    bodies: [
+      { id: 0, name: "ground", mass: 0, com: [0, 0, 0], parent_id: null, transform: { translation: [0, 0, 0], rotation: [1, 0, 0, 0] } },
+      { id: 1, name: "pelvis", mass: 11.78, com: [0, 0, 0], parent_id: 0, transform: { translation: [0, 0, 0.85], rotation: [1, 0, 0, 0] } },
+      { id: 2, name: "femur_r", mass: 9.3, com: [0, 0, -0.17], parent_id: 1, transform: { translation: [0.08, -0.1, -0.07], rotation: [1, 0, 0, 0] } },
+      { id: 3, name: "tibia_r", mass: 3.71, com: [0, 0, -0.18], parent_id: 2, transform: { translation: [0, 0, -0.42], rotation: [1, 0, 0, 0] } },
+      { id: 4, name: "talus_r", mass: 0.1, com: [0, 0, 0], parent_id: 3, transform: { translation: [0.02, 0, -0.4], rotation: [1, 0, 0, 0] } },
+    ],
+    joints: [
+      { id: 5, name: "hip_r", joint_type: "hinge", body_a: 1, body_b: 2, axis: [0, 0, 1], limits: { lower: -0.52, upper: 2.09 } },
+      { id: 6, name: "knee_r", joint_type: "hinge", body_a: 2, body_b: 3, axis: [0, 0, 1], limits: { lower: 0, upper: 2.09 } },
+      { id: 7, name: "ankle_r", joint_type: "hinge", body_a: 3, body_b: 4, axis: [0, 0, 1], limits: { lower: -0.7, upper: 0.52 } },
+    ],
+    muscles: [],
+    sites: [],
+    meshes: [],
   };
 }

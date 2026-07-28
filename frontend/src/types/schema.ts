@@ -1,59 +1,59 @@
 /**
- * Canonical Melos types — mirrors melos.core.model exactly.
- *
- * Field names, nesting, and types MUST match the Pydantic schema.
- * This is the single source of truth for the frontend.
+ * Types matching the melosim Rust server API (GET /scene).
  */
 
-export interface JointLimits {
-  lower: number;
-  upper: number;
-}
-
-export interface JointDef {
-  joint_type: string;
-  axis: number[];
-  limits: JointLimits;
-  parent_link: string;
-  child_link: string;
-  default_qpos: number;
-}
-
-export interface LinkDef {
+export interface BodyInfo {
+  id: number;
   name: string;
   mass: number;
-  center_of_mass: number[];
-  inertia: number[];
-  graphics_file: string;
-  visible: boolean;
+  com: [number, number, number];
+  parent_id: number | null;
+  transform: TransformInfo;
 }
 
-export interface LinkTransform {
+export interface TransformInfo {
   translation: [number, number, number];
-  rotation: [number, number, number, number]; // (w, x, y, z)
+  rotation: [number, number, number, number]; // w, x, y, z
 }
 
-export interface SkeletonState {
-  joints: Record<string, JointDef>;
-  links: Record<string, LinkDef>;
-  transforms: Record<string, LinkTransform>;
-  parent_map: Record<string, string>;
-  order: string[];
-  descendants: Record<string, string[]>;
-}
-
-export interface ModelState {
+export interface JointInfo {
+  id: number;
   name: string;
-  skeleton: SkeletonState;
+  joint_type: string;
+  body_a: number;
+  body_b: number;
+  axis: [number, number, number] | null;
+  limits: { lower: number; upper: number } | null;
 }
 
-/** Subject measurements */
-export interface BodyMeasurement {
-  body_mass: number;
-  body_height: number;
-  segment: string;
-  length: number;
-  circumference: number;
-  width: number;
-  depth: number;
+export interface MuscleInfo {
+  id: number;
+  name: string;
+  max_isometric_force: number;
+  optimal_fiber_length: number;
+  tendon_slack_length: number;
+}
+
+export interface SiteInfo {
+  id: number;
+  name: string;
+  parent: number;
+  offset: [number, number, number];
+}
+
+export interface MeshInfo {
+  id: number;
+  name: string;
+  parent: number;
+  path: string;
+  offset: [number, number, number];
+}
+
+export interface Scene {
+  num_entities: number;
+  bodies: BodyInfo[];
+  joints: JointInfo[];
+  muscles: MuscleInfo[];
+  sites: SiteInfo[];
+  meshes: MeshInfo[];
 }
