@@ -1,7 +1,8 @@
-import { useState, useRef, useMemo } from "react";
-import { Canvas } from "@react-three/fiber";
+import { useState, useRef, useMemo, Suspense } from "react";
+import { Canvas, useLoader } from "@react-three/fiber";
 import { OrbitControls, Grid, Box, Line, Sphere } from "@react-three/drei";
 import * as THREE from "three";
+import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import type { Scene as SceneData, BodyInfo, JointInfo, SiteInfo, MeshInfo } from "../types/schema";
 
 // ── Scene ────────────────────────────────────────────────────────────────
@@ -22,11 +23,60 @@ export default function Scene({ scene, onSelect, selected, showSites }: ScenePro
         <directionalLight position={[-3, -2, -5]} intensity={0.3} />
         <Grid infiniteGrid />
         <OrbitControls makeDefault />
-        {scene && (
-          <ModelRenderer scene={scene} selected={selected} onSelect={onSelect} showSites={showSites} />
-        )}
+        <Suspense fallback={null}>
+          {scene && (
+            <ModelRenderer scene={scene} selected={selected} onSelect={onSelect} showSites={showSites} />
+          )}
+        </Suspense>
       </Canvas>
     </div>
+  );
+}
+
+// ── STL Mesh loader ──────────────────────────────────────────────────────
+
+function STLMesh({ mesh, color, opacity, onClick, onPointerOver, onPointerOut }: {
+  mesh: MeshInfo;
+  color: string;
+  opacity: number;
+  onClick?: () => void;
+  onPointerOver?: () => void;
+  onPointerOut?: () => void;
+}) {
+  const geometry = useLoader(STLLoader, mesh.url);
+  
+  const processedGeometry = useMemo(() => {
+    if (!geometry) return null;
+    const geo = geometry.clone();
+    geo.computeBoundingBox();
+    const center = new THREE.Vector3();
+    geo.boundingBox?.getCenter(center);
+    geo.translate(-center.x, -center.y, -center.z);
+    
+    const size = new THREE.Vector3();
+    geo.boundingBox?.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const targetSize = 0.15;
+    const scaleFactor = targetSize / maxDim;
+    geo.scale(scaleFactor, scaleFactor, scaleFactor);
+    
+    return geo;
+  }, [geometry]);
+
+  if (!processedGeometry) {
+    return (
+      <Box args={[0.08, 0.08, 0.08]}
+        onClick={onClick} onPointerOver={onPointerOver} onPointerOut={onPointerOut}>
+        <meshStandardMaterial color={color} transparent opacity={opacity} />
+      </Box>
+    );
+  }
+
+  return (
+    <mesh geometry={processedGeometry}
+      onClick={onClick} onPointerOver={onPointerOver} onPointerOut={onPointerOut}>
+      <meshStandardMaterial color={color} transparent opacity={opacity} />
+    </mesh>
   );
 }
 
@@ -138,19 +188,21 @@ function BodyGroup({ bodyId, bodyMap, childrenMap, jointByChild, meshesByBody, s
       {meshes.length > 0 ? (
         meshes.map(mesh => (
           <group key={mesh.id} position={new THREE.Vector3(mesh.offset[0], mesh.offset[1], mesh.offset[2])}>
-            <Box args={[0.08 * scale, 0.08 * scale, 0.08 * scale]}
-              onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
+            <STLMesh
+              mesh={mesh}
+              color={color}
+              opacity={0.85}
+              onPointerOver={() => setHovered(true)}
               onPointerOut={() => setHovered(false)}
-              onClick={(e) => { e.stopPropagation(); onSelect(isSelected ? null : bodyId); }}>
-              <meshStandardMaterial color={color} transparent opacity={0.85} />
-            </Box>
+              onClick={() => onSelect(isSelected ? null : bodyId)}
+            />
           </group>
         ))
       ) : (
         <Box args={[0.14 * scale, 0.14 * scale, 0.14 * scale]}
-          onPointerOver={(e) => { e.stopPropagation(); setHovered(true); }}
+          onPointerOver={() => setHovered(true)}
           onPointerOut={() => setHovered(false)}
-          onClick={(e) => { e.stopPropagation(); onSelect(isSelected ? null : bodyId); }}>
+          onClick={() => onSelect(isSelected ? null : bodyId)}>
           <meshStandardMaterial color={color} transparent opacity={0.85} />
         </Box>
       )}

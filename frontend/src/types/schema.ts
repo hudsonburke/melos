@@ -47,6 +47,7 @@ export interface MeshInfo {
   parent: number;
   path: string;
   offset: [number, number, number];
+  url: string;
 }
 
 export interface Scene {
